@@ -214,6 +214,22 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
       required: ["productId", "productTitle"],
     },
   },
+  {
+    name: "search_web",
+    description:
+      "Search the web for product information when you need more data to classify a product, write a description, or determine age/grade ranges. Use when confidence is below 75% or the product description is insufficient. Returns extracted text from the URL.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "A search query or direct URL. For products, try: product title + publisher/vendor + 'age range' or 'grade level'. For direct URLs, provide the full URL.",
+        },
+      },
+      required: ["query"],
+    },
+  },
 ];
 
 // ── Tool Executors ──
@@ -262,6 +278,8 @@ export async function executeTool(
       return executeGenerateSeo(input);
     case "classify_product":
       return executeClassifyProduct(input);
+    case "search_web":
+      return executeSearchWeb(input);
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` });
   }
@@ -630,4 +648,100 @@ async function executeClassifyProduct(input: ToolInput): Promise<string> {
     instruction:
       "Based on the product title, description, and vendor, determine appropriate classification tags. Use these categories: Grade: (PreK, K, 1st-12th), Age: (ranges like 3-5, 5-7, 8-10, 10-12, 12+), Book: (Board, Picture, Early Reader, Chapter, Middle Grade, Young Adult, Classics, Reference, Workbook), Genre: (Fiction, Nonfiction, and specific genres if clear). Return your recommendations with confidence levels. Then call tag_product to apply them.",
   });
+}
+
+async function executeSearchWeb(input: ToolInput): Promise<string> {
+  const query = (input.query as string) || "";
+  if (!query) {
+    return JSON.stringify({ error: "Query is required" });
+  }
+
+  // If it looks like a URL, fetch it directly
+  if (query.startsWith("http://") || query.startsWith("https://")) {
+    try {
+      const resp = await fetch(query, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; NCHOTools/1.0)",
+          Accept: "text/html,application/xhtml+xml",
+        },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!resp.ok) {
+        return JSON.stringify({ error: `HTTP ${resp.status} from ${query}` });
+      }
+      const html = await resp.text();
+      // Strip HTML tags, scripts, styles — extract readable text
+      const text = html
+        .replace(/<script[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[\s\S]*?<\/style>/gi, "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 4000);
+      return JSON.stringify({
+        source: query,
+        type: "url_fetch",
+        text,
+      });
+    } catch (err) {
+      return JSON.stringify({
+        error: `Failed to fetch URL: ${err instanceof Error ? err.message : "unknown"}`,
+      });
+    }
+  }
+
+  // Otherwise, use DuckDuckGo instant answer API (no API key needed)
+  try {
+    const encoded = encodeURIComponent(query);
+    const resp = await fetch(
+      `https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=1`,
+      {
+        headers: { "User-Agent": "NCHOTools/1.0" },
+        signal: AbortSignal.timeout(10000),
+      }
+    );
+    if (!resp.ok) {
+      return JSON.stringify({ error: `DuckDuckGo returned HTTP ${resp.status}` });
+    }
+    const data = await resp.json();
+
+    // Collect all useful info from DDG response
+    const results: string[] = [];
+    if (data.Abstract) results.push(`Abstract: ${data.Abstract}`);
+    if (data.AbstractSource) results.push(`Source: ${data.AbstractSource}`);
+    if (data.AbstractURL) results.push(`URL: ${data.AbstractURL}`);
+    if (data.Answer) results.push(`Answer: ${data.Answer}`);
+    if (data.Definition) results.push(`Definition: ${data.Definition}`);
+    if (data.RelatedTopics) {
+      for (const topic of data.RelatedTopics.slice(0, 5)) {
+        if (topic.Text) results.push(`- ${topic.Text}`);
+        if (topic.Topics) {
+          for (const sub of topic.Topics.slice(0, 3)) {
+            if (sub.Text) results.push(`  - ${sub.Text}`);
+          }
+        }
+      }
+    }
+
+    if (results.length === 0) {
+      // DDG instant answer had no results — try a direct Amazon lookup
+      const amazonUrl = `https://www.amazon.com/s?k=${encoded}`;
+      return JSON.stringify({
+        source: "duckduckgo",
+        type: "no_instant_answer",
+        suggestion: `No instant answer found. Try calling search_web with a direct URL like "${amazonUrl}" or a publisher website URL to get product details.`,
+      });
+    }
+
+    return JSON.stringify({
+      source: "duckduckgo",
+      type: "instant_answer",
+      query,
+      results: results.join("\n"),
+    });
+  } catch (err) {
+    return JSON.stringify({
+      error: `Web search failed: ${err instanceof Error ? err.message : "unknown"}`,
+    });
+  }
 }

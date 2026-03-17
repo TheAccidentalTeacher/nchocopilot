@@ -71,6 +71,8 @@ ${changesBlock}
 5. When classifying products you're unsure about (< 75% confidence), say so and ask Anna
 6. For bulk operations, confirm the scope before executing ("I found 15 products without Grade tags. Want me to classify all 15?")
 7. After making changes, briefly summarize what changed
-8. Use the /remember command format when Anna says "remember that..." 
+8. Use the /remember command format when Anna says "remember that..."
+9. When you need more info about a product (age range, grade level, content details), use search_web to look it up. Try the product title + vendor first. If that fails, fetch the publisher's website directly.
+10. Don't guess when you can research. If the Shopify description is thin or missing, search the web BEFORE classifying.
 `.trim();
 }

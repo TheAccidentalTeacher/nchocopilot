@@ -38,6 +38,7 @@ export default function ChatPanel() {
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [showThreads, setShowThreads] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [threadError, setThreadError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -53,13 +54,19 @@ export default function ChatPanel() {
 
   const loadThreads = async () => {
     try {
+      setThreadError(null);
       const resp = await fetch("/api/threads");
       if (resp.ok) {
         const data = await resp.json();
-        setThreads(data);
+        setThreads(Array.isArray(data) ? data : []);
+      } else {
+        const err = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }));
+        console.error("Threads fetch failed:", err);
+        setThreadError(err.error || `HTTP ${resp.status}`);
       }
-    } catch {
-      // Supabase not configured yet — work without threads
+    } catch (err) {
+      console.error("Threads fetch error:", err);
+      setThreadError("Failed to connect to database");
     }
   };
 
@@ -170,65 +177,72 @@ export default function ChatPanel() {
         if (done) break;
 
         accumulated += decoder.decode(value, { stream: true });
-        const lines = accumulated.split("\n");
-        accumulated = lines.pop() || "";
 
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            const event = line.slice(7);
-            const dataLine = lines[lines.indexOf(line) + 1];
-            if (!dataLine?.startsWith("data: ")) continue;
+        // Parse SSE: split on double newline to get complete events
+        const events = accumulated.split("\n\n");
+        // Keep the last chunk if it's incomplete (no trailing \n\n)
+        accumulated = events.pop() || "";
 
-            try {
-              const data = JSON.parse(dataLine.slice(6));
+        for (const block of events) {
+          if (!block.trim()) continue;
+          const lines = block.split("\n");
+          let eventType = "";
+          let dataStr = "";
+          for (const line of lines) {
+            if (line.startsWith("event: ")) eventType = line.slice(7);
+            else if (line.startsWith("data: ")) dataStr = line.slice(6);
+          }
+          if (!eventType || !dataStr) continue;
 
-              switch (event) {
-                case "thread":
-                  threadId = data.id;
-                  break;
-                case "text":
-                  setStreamText((prev) => prev + data.content);
-                  break;
-                case "tool_start":
-                  setToolEvents((prev) => [
-                    ...prev,
-                    { tool: data.tool, input: data.input },
-                  ]);
-                  break;
-                case "tool_result":
-                  setToolEvents((prev) => {
-                    const copy = [...prev];
-                    const last = copy.findLast(
-                      (e) => e.tool === data.tool && !e.result
-                    );
-                    if (last) last.result = data.result;
-                    return copy;
-                  });
-                  break;
-                case "done":
-                  // Reload thread to get final saved state
-                  if (threadId) {
-                    try {
-                      const threadResp = await fetch(
-                        `/api/threads/${threadId}`
-                      );
-                      if (threadResp.ok) {
-                        const full = await threadResp.json();
-                        setActiveThread(full);
-                      }
-                    } catch { /* ignore */ }
-                  }
-                  loadThreads();
-                  break;
-                case "error":
-                  setStreamText(
-                    (prev) => prev + `\n\n❌ Error: ${data.message}`
+          try {
+            const data = JSON.parse(dataStr);
+
+            switch (eventType) {
+              case "thread":
+                threadId = data.id;
+                break;
+              case "text":
+                setStreamText((prev) => prev + data.content);
+                break;
+              case "tool_start":
+                setToolEvents((prev) => [
+                  ...prev,
+                  { tool: data.tool, input: data.input },
+                ]);
+                break;
+              case "tool_result":
+                setToolEvents((prev) => {
+                  const copy = [...prev];
+                  const last = copy.findLast(
+                    (e) => e.tool === data.tool && !e.result
                   );
-                  break;
-              }
-            } catch {
-              // Skip malformed SSE
+                  if (last) last.result = data.result;
+                  return copy;
+                });
+                break;
+              case "done":
+                // Reload thread to get final saved state
+                if (threadId) {
+                  try {
+                    const threadResp = await fetch(
+                      `/api/threads/${threadId}`
+                    );
+                    if (threadResp.ok) {
+                      const full = await threadResp.json();
+                      setActiveThread(full);
+                    }
+                  } catch { /* ignore */ }
+                }
+                loadThreads();
+                break;
+              case "error":
+                setStreamText(
+                  (prev) => prev + `\n\n❌ Error: ${data.message}`
+                );
+                break;
             }
+          } catch {
+            // Skip malformed SSE
           }
         }
       }
@@ -265,7 +279,18 @@ export default function ChatPanel() {
             </button>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {threads.length === 0 ? (
+            {threadError ? (
+              <div className="p-3 text-xs text-red-500">
+                <p className="font-medium">⚠️ DB Error:</p>
+                <p className="mt-1">{threadError}</p>
+                <button
+                  onClick={loadThreads}
+                  className="mt-2 px-2 py-1 bg-red-50 text-red-600 rounded hover:bg-red-100"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : threads.length === 0 ? (
               <p className="p-3 text-xs text-pink-300">No conversations yet</p>
             ) : (
               threads.map((t) => (
