@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
+import LayoutShell from "@/components/layout-shell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,7 +39,7 @@ export default function RootLayout({
       >
         <div className="flex min-h-screen">
           {/* Sidebar */}
-          <aside className="w-56 bg-gradient-to-b from-white to-pink-50/60 border-r border-pink-100 flex flex-col">
+          <aside className="w-56 bg-gradient-to-b from-white to-pink-50/60 border-r border-pink-100 flex flex-col shrink-0">
             <div className="p-4 border-b border-pink-100">
               <h1 className="font-bold text-lg text-pink-700">NCHO Tools</h1>
               <p className="text-xs text-pink-400">Store Management</p>
@@ -60,10 +61,8 @@ export default function RootLayout({
             </div>
           </aside>
 
-          {/* Main content */}
-          <main className="flex-1 p-8 overflow-auto">
-            {children}
-          </main>
+          {/* Main content + Chat panel */}
+          <LayoutShell>{children}</LayoutShell>
         </div>
       </body>
     </html>
