@@ -49,9 +49,9 @@ export default function PoliciesPage() {
   if (loading) {
     return (
       <div className="animate-pulse space-y-4">
-        <div className="h-8 bg-gray-200 rounded w-48" />
+        <div className="h-8 bg-pink-100 rounded w-48" />
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-20 bg-gray-200 rounded-lg" />
+          <div key={i} className="h-20 bg-pink-100/60 rounded-lg" />
         ))}
       </div>
     );
@@ -60,8 +60,8 @@ export default function PoliciesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Policies</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-2xl font-bold text-pink-900">Policies</h1>
+        <p className="text-sm text-pink-400 mt-1">
           Paste-ready policies for your Shopify store. Review each one, then
           push to Shopify or copy to clipboard.
         </p>
@@ -82,24 +82,24 @@ export default function PoliciesPage() {
           return (
             <div
               key={key}
-              className="bg-white rounded-lg border border-gray-200 overflow-hidden"
+              className="bg-white/80 backdrop-blur-sm rounded-xl border border-pink-100 overflow-hidden shadow-sm"
             >
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <span
                     className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                       live
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-700"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-pink-100 text-pink-600"
                     }`}
                   >
                     {live ? "✅ Live" : "❌ Not set"}
                   </span>
                   <div>
-                    <h3 className="font-semibold text-gray-900">
+                    <h3 className="font-semibold text-pink-900">
                       {policy.title}
                     </h3>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-pink-400">
                       Shopify page title: {policy.pageTitle}
                     </p>
                   </div>
@@ -109,7 +109,7 @@ export default function PoliciesPage() {
                     onClick={() =>
                       setExpanded(isExpanded ? null : key)
                     }
-                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="px-3 py-1.5 text-sm border border-pink-200 rounded-lg hover:bg-pink-50 transition-colors"
                   >
                     {isExpanded ? "Collapse" : "Preview"}
                   </button>
@@ -129,14 +129,14 @@ export default function PoliciesPage() {
                         3000
                       );
                     }}
-                    className="px-3 py-1.5 text-sm bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    className="px-3 py-1.5 text-sm bg-sky-50 rounded-lg hover:bg-sky-100 transition-colors"
                   >
                     📋 Copy
                   </button>
                   <button
                     onClick={() => handlePush(key)}
                     disabled={pushing === key}
-                    className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    className="px-3 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-50 transition-colors shadow-sm"
                   >
                     {pushing === key ? "Pushing..." : "Push to Shopify"}
                   </button>
@@ -154,9 +154,9 @@ export default function PoliciesPage() {
               )}
 
               {isExpanded && (
-                <div className="border-t border-gray-100 p-4 bg-gray-50">
+                <div className="border-t border-pink-50 p-4 bg-pink-50/30">
                   <div
-                    className="prose prose-sm max-w-none text-gray-700"
+                    className="prose prose-sm max-w-none text-pink-900/80"
                     dangerouslySetInnerHTML={{ __html: policy.body }}
                   />
                 </div>

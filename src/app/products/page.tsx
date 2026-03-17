@@ -76,9 +76,9 @@ function SeoModal({
   const image = product.images?.edges?.[0]?.node;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-gray-200 flex items-start gap-4">
+    <div className="fixed inset-0 bg-pink-950/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-pink-100">
+        <div className="p-6 border-b border-pink-100 flex items-start gap-4">
           {image && (
             <img
               src={image.url}
@@ -87,17 +87,17 @@ function SeoModal({
             />
           )}
           <div className="flex-1 min-w-0">
-            <h2 className="font-bold text-lg text-gray-900 truncate">
+            <h2 className="font-bold text-lg text-pink-900 truncate">
               {product.title}
             </h2>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-sky-500">
               {product.vendor} · ${product.priceRangeV2?.minVariantPrice?.amount}
             </p>
             <div className="flex flex-wrap gap-1 mt-1">
               {product.tags?.slice(0, 5).map((t) => (
                 <span
                   key={t}
-                  className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded"
+                  className="text-xs bg-pink-50 text-pink-500 px-1.5 py-0.5 rounded"
                 >
                   {t}
                 </span>
@@ -106,7 +106,7 @@ function SeoModal({
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl"
+            className="text-pink-300 hover:text-pink-500 text-xl"
           >
             ✕
           </button>
@@ -114,9 +114,9 @@ function SeoModal({
 
         <div className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-pink-800 mb-1">
               SEO Title{" "}
-              <span className="text-gray-400">
+              <span className="text-pink-300">
                 ({seoTitle.length}/60 chars)
               </span>
             </label>
@@ -125,15 +125,15 @@ function SeoModal({
               value={seoTitle}
               onChange={(e) => setSeoTitle(e.target.value)}
               maxLength={60}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full border border-pink-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-pink-400 focus:border-pink-400"
               placeholder="Enter SEO title..."
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-pink-800 mb-1">
               Meta Description{" "}
-              <span className="text-gray-400">
+              <span className="text-pink-300">
                 ({seoDescription.length}/155 chars)
               </span>
             </label>
@@ -142,28 +142,28 @@ function SeoModal({
               onChange={(e) => setSeoDescription(e.target.value)}
               maxLength={155}
               rows={3}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full border border-pink-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-pink-400 focus:border-pink-400"
               placeholder="Enter meta description..."
             />
           </div>
 
           {/* Google Preview */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-xs text-gray-400 mb-2">Google Preview</p>
-            <p className="text-blue-700 text-base font-medium truncate">
+          <div className="bg-sky-50/50 rounded-lg p-4">
+            <p className="text-xs text-sky-400 mb-2">Google Preview</p>
+            <p className="text-sky-700 text-base font-medium truncate">
               {seoTitle || product.title}
             </p>
             <p className="text-green-700 text-xs">
               nextchapterhomeschool.com/products/{product.handle}
             </p>
-            <p className="text-gray-600 text-sm mt-0.5 line-clamp-2">
+            <p className="text-sky-600 text-sm mt-0.5 line-clamp-2">
               {seoDescription || "No description set."}
             </p>
           </div>
 
           {status && (
             <p
-              className={`text-sm ${status.startsWith("Error") ? "text-red-600" : "text-green-600"}`}
+              className={`text-sm ${status.startsWith("Error") ? "text-pink-600" : "text-emerald-600"}`}
             >
               {status}
             </p>
@@ -180,7 +180,7 @@ function SeoModal({
             <button
               onClick={saveSeo}
               disabled={saving || (!seoTitle && !seoDescription)}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              className="flex-1 px-4 py-2 bg-pink-500 text-white text-sm rounded-lg hover:bg-pink-600 disabled:opacity-50 transition-colors shadow-sm"
             >
               {saving ? "Saving..." : "💾 Save to Shopify"}
             </button>
@@ -198,8 +198,8 @@ export default function ProductsPage() {
     <Suspense
       fallback={
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-48" />
-          <div className="h-10 bg-gray-200 rounded" />
+          <div className="h-8 bg-pink-100 rounded w-48" />
+          <div className="h-10 bg-pink-100 rounded" />
         </div>
       }
     >
@@ -324,11 +324,11 @@ function ProductsContent() {
   if (loading) {
     return (
       <div className="animate-pulse space-y-4">
-        <div className="h-8 bg-gray-200 rounded w-48" />
-        <div className="h-10 bg-gray-200 rounded" />
+        <div className="h-8 bg-pink-100 rounded w-48" />
+        <div className="h-10 bg-pink-100 rounded" />
         <div className="space-y-2">
           {[...Array(10)].map((_, i) => (
-            <div key={i} className="h-12 bg-gray-200 rounded" />
+            <div key={i} className="h-12 bg-pink-100/60 rounded" />
           ))}
         </div>
       </div>
@@ -337,7 +337,7 @@ function ProductsContent() {
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4">
+      <div className="bg-pink-50 border border-pink-200 text-pink-700 rounded-lg p-4">
         <h2 className="font-bold">Error loading products</h2>
         <p className="text-sm mt-1">{error}</p>
       </div>
@@ -348,8 +348,8 @@ function ProductsContent() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Products</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-pink-900">Products</h1>
+          <p className="text-sm text-pink-400">
             {products.length} total · {noSeoCount} missing SEO
           </p>
         </div>
@@ -391,12 +391,12 @@ function ProductsContent() {
           placeholder="Search products..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="flex-1 border border-pink-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-pink-400 focus:border-pink-400"
         />
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value as Filter)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+          className="border border-pink-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-pink-400"
         >
           <option value="all">All ({products.length})</option>
           <option value="no-seo">Missing SEO ({noSeoCount})</option>
@@ -411,26 +411,26 @@ function ProductsContent() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-pink-100 overflow-hidden shadow-sm">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="bg-pink-50/60 border-b border-pink-100">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">
+              <th className="text-left px-4 py-3 font-medium text-pink-600">
                 Product
               </th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">
+              <th className="text-left px-4 py-3 font-medium text-pink-600">
                 Vendor
               </th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">
+              <th className="text-left px-4 py-3 font-medium text-pink-600">
                 Tags
               </th>
-              <th className="text-center px-4 py-3 font-medium text-gray-600">
+              <th className="text-center px-4 py-3 font-medium text-pink-600">
                 SEO Title
               </th>
-              <th className="text-center px-4 py-3 font-medium text-gray-600">
+              <th className="text-center px-4 py-3 font-medium text-pink-600">
                 SEO Desc
               </th>
-              <th className="text-right px-4 py-3 font-medium text-gray-600">
+              <th className="text-right px-4 py-3 font-medium text-pink-600">
                 Price
               </th>
             </tr>
@@ -442,7 +442,7 @@ function ProductsContent() {
                 <tr
                   key={p.id}
                   onClick={() => setSelected(p)}
-                  className="hover:bg-blue-50 cursor-pointer transition-colors"
+                  className="hover:bg-pink-50/60 cursor-pointer transition-colors"
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -453,11 +453,11 @@ function ProductsContent() {
                           className="w-10 h-10 object-cover rounded"
                         />
                       ) : (
-                        <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">
+                        <div className="w-10 h-10 bg-pink-50 rounded flex items-center justify-center text-pink-300 text-xs">
                           No img
                         </div>
                       )}
-                      <span className="font-medium text-gray-900 truncate max-w-xs">
+                      <span className="font-medium text-pink-900 truncate max-w-xs">
                         {p.title}
                       </span>
                     </div>
@@ -466,8 +466,8 @@ function ProductsContent() {
                     <span
                       className={
                         p.vendor === "Author Name"
-                          ? "text-red-600 font-medium"
-                          : "text-gray-600"
+                          ? "text-pink-600 font-medium"
+                          : "text-sky-600"
                       }
                     >
                       {p.vendor}
@@ -478,13 +478,13 @@ function ProductsContent() {
                       {p.tags?.slice(0, 3).map((t) => (
                         <span
                           key={t}
-                          className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded"
+                          className="text-xs bg-sky-50 text-sky-500 px-1.5 py-0.5 rounded"
                         >
                           {t}
                         </span>
                       ))}
                       {p.tags?.length > 3 && (
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-pink-300">
                           +{p.tags.length - 3}
                         </span>
                       )}
@@ -492,19 +492,19 @@ function ProductsContent() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     {p.seo?.title ? (
-                      <span className="text-green-600">✅</span>
+                      <span className="text-emerald-500">✅</span>
                     ) : (
-                      <span className="text-red-400">❌</span>
+                      <span className="text-pink-300">❌</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">
                     {p.seo?.description ? (
-                      <span className="text-green-600">✅</span>
+                      <span className="text-emerald-500">✅</span>
                     ) : (
-                      <span className="text-red-400">❌</span>
+                      <span className="text-pink-300">❌</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right text-gray-600">
+                  <td className="px-4 py-3 text-right text-sky-600">
                     ${p.priceRangeV2?.minVariantPrice?.amount || "–"}
                   </td>
                 </tr>
@@ -514,7 +514,7 @@ function ProductsContent() {
         </table>
 
         {filtered.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-pink-400">
             No products match your current filter.
           </div>
         )}

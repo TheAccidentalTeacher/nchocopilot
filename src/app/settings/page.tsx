@@ -57,32 +57,32 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-2xl font-bold text-pink-900">Settings</h1>
+        <p className="text-sm text-pink-400 mt-1">
           Shopify connection and app configuration
         </p>
       </div>
 
       {/* Connection Status */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="font-semibold text-gray-900 mb-4">
+      <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-pink-100 p-6 shadow-sm">
+        <h2 className="font-semibold text-pink-800 mb-4">
           Shopify Connection
         </h2>
 
         {loading ? (
           <div className="animate-pulse space-y-3">
-            <div className="h-4 bg-gray-200 rounded w-64" />
-            <div className="h-4 bg-gray-200 rounded w-48" />
+            <div className="h-4 bg-pink-100 rounded w-64" />
+            <div className="h-4 bg-pink-100 rounded w-48" />
           </div>
         ) : status ? (
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               <span
                 className={`w-3 h-3 rounded-full ${
-                  status.connected ? "bg-green-500" : "bg-red-500"
+                  status.connected ? "bg-emerald-400" : "bg-pink-500"
                 }`}
               />
-              <span className="text-sm text-gray-700">
+              <span className="text-sm text-pink-800">
                 {status.connected
                   ? "Connected to Shopify"
                   : "Not connected"}
@@ -91,33 +91,33 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="text-gray-500">Store</p>
-                <p className="font-medium text-gray-900">
+                <p className="text-pink-400">Store</p>
+                <p className="font-medium text-pink-900">
                   {status.store || "Not configured"}
                 </p>
               </div>
               <div>
-                <p className="text-gray-500">Token</p>
-                <p className="font-medium text-gray-900">
+                <p className="text-pink-400">Token</p>
+                <p className="font-medium text-pink-900">
                   {status.tokenValid ? "✅ Valid" : "❌ Invalid"}
                 </p>
               </div>
               <div>
-                <p className="text-gray-500">Scopes</p>
-                <p className="font-medium text-gray-900">
+                <p className="text-pink-400">Scopes</p>
+                <p className="font-medium text-pink-900">
                   {status.scopes || "Unknown"}
                 </p>
               </div>
               <div>
-                <p className="text-gray-500">Last Sync</p>
-                <p className="font-medium text-gray-900">
+                <p className="text-pink-400">Last Sync</p>
+                <p className="font-medium text-pink-900">
                   {lastSync || "Never"}
                 </p>
               </div>
             </div>
 
             {status.error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">
+              <div className="bg-pink-50 border border-pink-200 text-pink-700 rounded-lg p-3 text-sm">
                 {status.error}
               </div>
             )}
@@ -128,14 +128,14 @@ export default function SettingsPage() {
           <button
             onClick={checkConnection}
             disabled={loading}
-            className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 text-sm border border-pink-200 rounded-lg hover:bg-pink-50 disabled:opacity-50 transition-colors"
           >
             🔄 Re-check Connection
           </button>
           <button
             onClick={handleRefreshData}
             disabled={refreshing}
-            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-50 transition-colors shadow-sm"
           >
             {refreshing ? "Refreshing..." : "🔄 Refresh Store Data"}
           </button>
@@ -143,43 +143,43 @@ export default function SettingsPage() {
       </div>
 
       {/* API Configuration (display-only) */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="font-semibold text-gray-900 mb-4">
+      <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-pink-100 p-6 shadow-sm">
+        <h2 className="font-semibold text-pink-800 mb-4">
           API Configuration
         </h2>
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-pink-400 mb-4">
           These values are loaded from environment variables (.env.local). They
           cannot be changed here.
         </p>
 
         <div className="space-y-3 text-sm">
-          <div className="flex items-center justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-500">SHOPIFY_STORE</span>
-            <code className="text-gray-900 bg-gray-100 px-2 py-0.5 rounded text-xs">
+          <div className="flex items-center justify-between py-2 border-b border-pink-50">
+            <span className="text-pink-400">SHOPIFY_STORE</span>
+            <code className="text-pink-900 bg-pink-50 px-2 py-0.5 rounded text-xs">
               {status?.store || "***"}
             </code>
           </div>
-          <div className="flex items-center justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-500">SHOPIFY_CLIENT_ID</span>
-            <code className="text-gray-900 bg-gray-100 px-2 py-0.5 rounded text-xs">
+          <div className="flex items-center justify-between py-2 border-b border-pink-50">
+            <span className="text-pink-400">SHOPIFY_CLIENT_ID</span>
+            <code className="text-pink-900 bg-pink-50 px-2 py-0.5 rounded text-xs">
               ••••••••••••4047
             </code>
           </div>
-          <div className="flex items-center justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-500">SHOPIFY_CLIENT_SECRET</span>
-            <code className="text-gray-900 bg-gray-100 px-2 py-0.5 rounded text-xs">
+          <div className="flex items-center justify-between py-2 border-b border-pink-50">
+            <span className="text-pink-400">SHOPIFY_CLIENT_SECRET</span>
+            <code className="text-pink-900 bg-pink-50 px-2 py-0.5 rounded text-xs">
               ••••••••••••d597
             </code>
           </div>
-          <div className="flex items-center justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-500">SHOPIFY_API_VERSION</span>
-            <code className="text-gray-900 bg-gray-100 px-2 py-0.5 rounded text-xs">
+          <div className="flex items-center justify-between py-2 border-b border-pink-50">
+            <span className="text-pink-400">SHOPIFY_API_VERSION</span>
+            <code className="text-pink-900 bg-pink-50 px-2 py-0.5 rounded text-xs">
               2026-01
             </code>
           </div>
           <div className="flex items-center justify-between py-2">
-            <span className="text-gray-500">ANTHROPIC_API_KEY</span>
-            <code className="text-gray-900 bg-gray-100 px-2 py-0.5 rounded text-xs">
+            <span className="text-pink-400">ANTHROPIC_API_KEY</span>
+            <code className="text-pink-900 bg-pink-50 px-2 py-0.5 rounded text-xs">
               {process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY ? "••••••••••••" : "Not set"}
             </code>
           </div>
