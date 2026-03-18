@@ -132,16 +132,19 @@ export async function fetchPages(): Promise<ShopifyPage[]> {
 }
 
 export async function fetchPolicies(): Promise<ShopifyPolicy[]> {
-  const data = await gql<{
-    shopPolicies: ShopifyPolicy[];
-  }>(`{
-    shopPolicies {
-      body
-      type
-      url
-    }
-  }`);
-  return data.shopPolicies ?? [];
+  try {
+    const data = await restGet<{ policies: Array<{ body: string; title: string; url: string }> }>(
+      "/policies.json"
+    );
+    return (data.policies ?? []).map((p) => ({
+      body: p.body,
+      type: p.title,
+      url: p.url,
+    }));
+  } catch {
+    // Policies endpoint may not be available — don't break dashboard
+    return [];
+  }
 }
 
 export interface DashboardData {
