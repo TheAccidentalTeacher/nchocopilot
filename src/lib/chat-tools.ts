@@ -2,7 +2,7 @@
 // Each tool has a definition (sent to Claude) and an executor (runs server-side)
 
 import type Anthropic from "@anthropic-ai/sdk";
-import { fetchProducts, fetchCollections, fetchShopInfo } from "./shopify-queries";
+import { fetchProducts, fetchCollections, fetchShopInfo, fetchBlogs } from "./shopify-queries";
 import { gql } from "./shopify";
 import { logChange, getRecentChanges, addStoreMemory } from "./supabase";
 import type { ShopifyProduct } from "./types";
@@ -230,6 +230,42 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
       required: ["query"],
     },
   },
+  {
+    name: "publish_blog",
+    description:
+      "Publish a blog article to the Shopify store. Write the post in NCHO brand voice (warm, teacher-curated, 'your child' not 'your student'). Include SEO title and meta description.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: {
+          type: "string",
+          description: "Blog post title",
+        },
+        body: {
+          type: "string",
+          description: "Blog post body in HTML format",
+        },
+        excerpt: {
+          type: "string",
+          description: "Short excerpt/summary (1-2 sentences)",
+        },
+        seoTitle: {
+          type: "string",
+          description: "SEO title (under 60 chars)",
+        },
+        seoDescription: {
+          type: "string",
+          description: "SEO meta description (under 155 chars)",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Tags for the blog post",
+        },
+      },
+      required: ["title", "body"],
+    },
+  },
 ];
 
 // ── Tool Executors ──
@@ -280,6 +316,8 @@ export async function executeTool(
       return executeClassifyProduct(input);
     case "search_web":
       return executeSearchWeb(input);
+    case "publish_blog":
+      return executePublishBlog(input);
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` });
   }
@@ -744,4 +782,60 @@ async function executeSearchWeb(input: ToolInput): Promise<string> {
       error: `Web search failed: ${err instanceof Error ? err.message : "unknown"}`,
     });
   }
+}
+
+async function executePublishBlog(input: ToolInput): Promise<string> {
+  const title = input.title as string;
+  const body = input.body as string;
+  const excerpt = (input.excerpt as string) || "";
+  const seoTitle = (input.seoTitle as string) || title;
+  const seoDescription = (input.seoDescription as string) || excerpt;
+  const tags = (input.tags as string[]) || [];
+
+  if (!title || !body) {
+    return JSON.stringify({ error: "Title and body are required" });
+  }
+
+  // Get the first blog
+  const blogs = await fetchBlogs();
+  if (blogs.length === 0) {
+    return JSON.stringify({ error: "No blog found in Shopify store" });
+  }
+  const blogId = blogs[0].id;
+
+  const data = await gql<{
+    articleCreate: {
+      article: { id: string; title: string; handle: string } | null;
+      userErrors: Array<{ field: string[]; message: string }>;
+    };
+  }>(
+    `mutation articleCreate($article: ArticleCreateInput!) {
+      articleCreate(article: $article) {
+        article { id title handle }
+        userErrors { field message }
+      }
+    }`,
+    {
+      article: {
+        blogId,
+        title,
+        body,
+        summary: excerpt || undefined,
+        tags,
+        seo: { title: seoTitle, description: seoDescription },
+        isPublished: true,
+        author: { name: "Next Chapter Homeschool Outpost" },
+      },
+    }
+  );
+
+  if (data.articleCreate.userErrors.length > 0) {
+    return JSON.stringify({ error: data.articleCreate.userErrors[0].message });
+  }
+
+  return JSON.stringify({
+    success: true,
+    article: data.articleCreate.article,
+    message: `Published "${title}" to the store blog.`,
+  });
 }

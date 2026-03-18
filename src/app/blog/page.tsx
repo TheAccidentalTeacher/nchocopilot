@@ -30,6 +30,8 @@ export default function BlogPage() {
   const [draft, setDraft] = useState<GeneratedPost | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishStatus, setPublishStatus] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/dashboard")
@@ -67,6 +69,47 @@ export default function BlogPage() {
       setDraftError(e instanceof Error ? e.message : "Failed to generate");
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!draft) return;
+    setPublishing(true);
+    setPublishStatus(null);
+    try {
+      const resp = await fetch("/api/publish-blog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: draft.title,
+          body: draft.body,
+          excerpt: draft.excerpt,
+          seoTitle: draft.seoTitle,
+          seoDescription: draft.seoDescription,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+      setPublishStatus(`✅ Published! Article: ${data.article?.title}`);
+      // Refresh article list
+      fetch("/api/dashboard")
+        .then((r) => r.json())
+        .then((d) => {
+          const allArticles: BlogArticle[] = [];
+          for (const blog of d.blogs || []) {
+            for (const article of blog.articles || []) {
+              allArticles.push(article);
+            }
+          }
+          setArticles(allArticles);
+        })
+        .catch(() => {});
+    } catch (e) {
+      setPublishStatus(
+        `Error: ${e instanceof Error ? e.message : "Failed to publish"}. Make sure write_content scope is enabled.`
+      );
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -142,6 +185,18 @@ export default function BlogPage() {
           {draftError && (
             <p className="text-sm text-pink-600">{draftError}</p>
           )}
+
+          {publishStatus && (
+            <p
+              className={`text-sm ${
+                publishStatus.startsWith("Error")
+                  ? "text-pink-600"
+                  : "text-emerald-600"
+              }`}
+            >
+              {publishStatus}
+            </p>
+          )}
         </div>
       )}
 
@@ -172,11 +227,11 @@ export default function BlogPage() {
                   📋 Copy HTML
                 </button>
                 <button
-                  disabled
-                  className="px-3 py-1.5 text-sm bg-pink-500 text-white rounded-lg opacity-50 cursor-not-allowed"
-                  title="Requires write_content scope"
+                  onClick={handlePublish}
+                  disabled={publishing}
+                  className="px-3 py-1.5 text-sm bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:opacity-50 transition-colors"
                 >
-                  🚀 Publish to Shopify
+                  {publishing ? "Publishing..." : "🚀 Publish to Shopify"}
                 </button>
               </div>
             </div>
@@ -250,10 +305,10 @@ export default function BlogPage() {
         )}
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 text-amber-700 rounded-lg p-4 text-sm">
-        <strong>Note:</strong> Publishing directly to Shopify requires
-        write_content scope. For now, generate the post here, copy the HTML, and
-        paste it into Shopify admin → Blog posts → Add blog post.
+      <div className="bg-sky-50 border border-sky-200 text-sky-700 rounded-lg p-4 text-sm">
+        <strong>Tip:</strong> Generate a post with AI, review the preview, then
+        publish directly to Shopify. You can also copy the HTML and paste it
+        manually in Shopify admin.
       </div>
     </div>
   );

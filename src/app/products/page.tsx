@@ -66,7 +66,7 @@ function SeoModal({
       setStatus("✅ Saved to Shopify!");
     } catch (e) {
       setStatus(
-        `Error saving: ${e instanceof Error ? e.message : "Unknown"}. Write scopes may not be enabled yet.`
+        `Error saving: ${e instanceof Error ? e.message : "Unknown"}`
       );
     } finally {
       setSaving(false);
