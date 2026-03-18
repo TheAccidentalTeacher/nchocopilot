@@ -81,13 +81,17 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
     name: "update_product",
     description:
-      "Update a product's description, SEO title, SEO description, productType, or vendor. Can update one or multiple fields at once.",
+      "Update a product's title, description, SEO title, SEO description, productType, or vendor. Can update one or multiple fields at once.",
     input_schema: {
       type: "object" as const,
       properties: {
         productId: {
           type: "string",
           description: "Shopify product GID",
+        },
+        title: {
+          type: "string",
+          description: "New product title",
         },
         descriptionHtml: {
           type: "string",
@@ -531,6 +535,7 @@ async function executeUpdateProduct(input: ToolInput): Promise<string> {
   // Build the mutation input
   const mutationInput: Record<string, unknown> = { id: productId };
 
+  if (input.title) mutationInput.title = input.title;
   if (input.descriptionHtml) mutationInput.descriptionHtml = input.descriptionHtml;
   if (input.productType) mutationInput.productType = input.productType;
   if (input.vendor) mutationInput.vendor = input.vendor;
@@ -565,6 +570,19 @@ async function executeUpdateProduct(input: ToolInput): Promise<string> {
 
   // Log each changed field
   const fieldsChanged: string[] = [];
+  if (input.title) {
+    fieldsChanged.push("title");
+    await logChange({
+      product_id: productId,
+      product_title: product.title,
+      field: "title",
+      old_value: product.title,
+      new_value: input.title as string,
+      action: "update_title",
+      source: "chatbot",
+      confidence: null,
+    });
+  }
   if (input.descriptionHtml) {
     fieldsChanged.push("description");
     await logChange({

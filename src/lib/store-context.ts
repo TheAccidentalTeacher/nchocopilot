@@ -73,7 +73,7 @@ You have 10 tools available through Claude's tool_use system. When you need data
 
 4. **tag_product** — Add or remove tags on a product. Uses Shopify GraphQL mutation \`productUpdate\`. Automatically logs the before/after change. Currently blocked by read-only scopes.
 
-5. **update_product** — Update a product's description (HTML), SEO title, SEO description, productType, or vendor. Multiple fields in one call. Logs every field change. Currently blocked by read-only scopes.
+5. **update_product** — Update a product's title, description (HTML), SEO title, SEO description, productType, or vendor. Multiple fields in one call. Logs every field change.
 
 6. **read_change_log** — Read the history of all changes you've made. Shows product, field, old value, new value, action type, source, and timestamp.
 
