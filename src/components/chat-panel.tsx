@@ -29,6 +29,23 @@ interface ToolEvent {
   result?: Record<string, unknown>;
 }
 
+interface Attachment {
+  type: "image" | "file";
+  name: string;
+  mimeType: string;
+  /** base64 data (no prefix) for images, full text content for files */
+  data: string;
+  /** data URL for image preview */
+  preview?: string;
+}
+
+const SUPPORTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const SUPPORTED_FILE_TYPES = [
+  "text/plain", "text/csv", "text/html", "text/markdown",
+  "application/json", "application/pdf",
+];
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
 export default function ChatPanel() {
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
@@ -39,8 +56,10 @@ export default function ChatPanel() {
   const [showThreads, setShowThreads] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [threadError, setThreadError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load threads on mount
   useEffect(() => {
@@ -100,6 +119,92 @@ export default function ChatPanel() {
     } catch { /* ignore */ }
   };
 
+  // --- Attachment handling ---
+  const processFile = useCallback((file: File) => {
+    if (file.size > MAX_FILE_SIZE) {
+      alert(`File too large: ${file.name} (max 10 MB)`);
+      return;
+    }
+
+    if (SUPPORTED_IMAGE_TYPES.includes(file.type)) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const base64 = dataUrl.split(",")[1];
+        setAttachments((prev) => [
+          ...prev,
+          {
+            type: "image",
+            name: file.name,
+            mimeType: file.type,
+            data: base64,
+            preview: dataUrl,
+          },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    } else if (
+      SUPPORTED_FILE_TYPES.includes(file.type) ||
+      file.name.endsWith(".csv") ||
+      file.name.endsWith(".json") ||
+      file.name.endsWith(".md") ||
+      file.name.endsWith(".txt")
+    ) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachments((prev) => [
+          ...prev,
+          {
+            type: "file",
+            name: file.name,
+            mimeType: file.type || "text/plain",
+            data: reader.result as string,
+          },
+        ]);
+      };
+      reader.readAsText(file);
+    } else {
+      alert(
+        `Unsupported file type: ${file.type || file.name}\nSupported: images (PNG, JPG, GIF, WebP), text, CSV, JSON, Markdown`
+      );
+    }
+  }, []);
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith("image/")) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) processFile(file);
+          return;
+        }
+      }
+      // If no image found, let normal text paste happen
+    },
+    [processFile]
+  );
+
+  const handleFilePick = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files) return;
+      for (const file of Array.from(files)) {
+        processFile(file);
+      }
+      // Reset so the same file can be picked again
+      e.target.value = "";
+    },
+    [processFile]
+  );
+
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const handleSync = async () => {
     setSyncing(true);
     try {
@@ -125,17 +230,28 @@ export default function ChatPanel() {
 
   const sendMessage = useCallback(async () => {
     const msg = input.trim();
-    if (!msg || streaming) return;
+    if ((!msg && attachments.length === 0) || streaming) return;
 
+    const currentAttachments = [...attachments];
     setInput("");
+    setAttachments([]);
     setStreaming(true);
     setStreamText("");
     setToolEvents([]);
 
+    // Build display text showing what was sent
+    const attachmentLabels = currentAttachments.map((a) =>
+      a.type === "image" ? `📷 ${a.name}` : `📄 ${a.name}`
+    );
+    const displayContent = [
+      msg,
+      ...attachmentLabels,
+    ].filter(Boolean).join("\n");
+
     // Optimistically add user message
     const userMsg: ChatMessage = {
       role: "user",
-      content: msg,
+      content: displayContent,
       timestamp: new Date().toISOString(),
     };
 
@@ -144,7 +260,7 @@ export default function ChatPanel() {
       ? { ...activeThread, messages: [...currentMessages, userMsg] }
       : {
           id: "",
-          title: msg.slice(0, 40),
+          title: (msg || currentAttachments[0]?.name || "New Chat").slice(0, 40),
           messages: [userMsg],
           pinned: false,
           updated_at: new Date().toISOString(),
@@ -157,7 +273,13 @@ export default function ChatPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           threadId: activeThread?.id || null,
-          message: msg,
+          message: msg || "(see attached)",
+          attachments: currentAttachments.map((a) => ({
+            type: a.type,
+            name: a.name,
+            mimeType: a.mimeType,
+            data: a.data,
+          })),
         }),
       });
 
@@ -253,7 +375,7 @@ export default function ChatPanel() {
     } finally {
       setStreaming(false);
     }
-  }, [input, streaming, activeThread]);
+  }, [input, streaming, activeThread, attachments]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -453,13 +575,64 @@ export default function ChatPanel() {
 
         {/* Input */}
         <div className="p-4 border-t border-pink-100 bg-white/60">
-          <div className="flex gap-2">
+          {/* Attachment previews */}
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {attachments.map((att, i) => (
+                <div
+                  key={i}
+                  className="relative group rounded-lg border border-pink-200 bg-white overflow-hidden"
+                >
+                  {att.type === "image" && att.preview ? (
+                    <img
+                      src={att.preview}
+                      alt={att.name}
+                      className="h-16 w-16 object-cover"
+                    />
+                  ) : (
+                    <div className="h-16 px-3 flex items-center gap-1.5 text-xs text-pink-600">
+                      <span>📄</span>
+                      <span className="max-w-[120px] truncate">{att.name}</span>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => removeAttachment(i)}
+                    className="absolute -top-1 -right-1 w-5 h-5 bg-pink-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2 items-end">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/png,image/jpeg,image/gif,image/webp,.csv,.json,.txt,.md,.html,.pdf"
+              onChange={handleFilePick}
+              className="hidden"
+            />
+            {/* Attach button */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={streaming}
+              className="px-2.5 py-2.5 text-pink-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors disabled:opacity-50"
+              title="Attach file or image (or paste a screenshot)"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+              </svg>
+            </button>
             <textarea
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask Anna's assistant anything..."
+              onPaste={handlePaste}
+              placeholder={attachments.length > 0 ? "Add a message about these files..." : "Ask Anna's assistant anything... (paste screenshots here!)"}
               rows={1}
               className="flex-1 resize-none border border-pink-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-pink-400 focus:border-pink-400 placeholder:text-pink-300"
               style={{ minHeight: "42px", maxHeight: "120px" }}
@@ -471,7 +644,7 @@ export default function ChatPanel() {
             />
             <button
               onClick={sendMessage}
-              disabled={streaming || !input.trim()}
+              disabled={streaming || (!input.trim() && attachments.length === 0)}
               className="px-4 py-2.5 bg-pink-500 text-white rounded-xl hover:bg-pink-600 disabled:opacity-50 transition-colors text-sm font-medium"
             >
               {streaming ? "..." : "Send"}

@@ -17,10 +17,11 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(request: Request) {
   try {
-    const { threadId, message } = await request.json();
+    const { threadId, message, attachments } = await request.json();
 
-    if (!message?.trim()) {
-      return new Response(JSON.stringify({ error: "Message is required" }), {
+    const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+    if (!message?.trim() && !hasAttachments) {
+      return new Response(JSON.stringify({ error: "Message or attachment is required" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
@@ -43,7 +44,56 @@ export async function POST(request: Request) {
         content: msg.content,
       });
     }
-    historyMessages.push({ role: "user", content: message });
+
+    // Build the new user message content blocks
+    const userContentBlocks: Anthropic.ContentBlockParam[] = [];
+
+    // Add text message if present
+    if (message?.trim()) {
+      userContentBlocks.push({ type: "text", text: message });
+    }
+
+    // Process attachments
+    if (hasAttachments) {
+      for (const att of attachments) {
+        if (att.type === "image" && att.data) {
+          // Claude vision: base64 image content block
+          const mediaType = att.mimeType as "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+          userContentBlocks.push({
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: mediaType,
+              data: att.data,
+            },
+          });
+        } else if (att.type === "file" && att.data) {
+          // Text file: inject as labeled text block
+          const truncated = att.data.length > 50000
+            ? att.data.slice(0, 50000) + "\n\n[... truncated at 50,000 characters]"
+            : att.data;
+          userContentBlocks.push({
+            type: "text",
+            text: `--- File: ${att.name} (${att.mimeType}) ---\n${truncated}\n--- End of ${att.name} ---`,
+          });
+        }
+      }
+    }
+
+    historyMessages.push({
+      role: "user",
+      content: userContentBlocks.length === 1 && userContentBlocks[0].type === "text"
+        ? (userContentBlocks[0] as Anthropic.TextBlockParam).text
+        : userContentBlocks,
+    });
+
+    // For thread storage, build a plain-text display version
+    const attachmentLabels = hasAttachments
+      ? attachments.map((a: { type: string; name: string }) =>
+          a.type === "image" ? `\ud83d\udcf7 ${a.name}` : `\ud83d\udcc4 ${a.name}`
+        )
+      : [];
+    const storageContent = [message || "", ...attachmentLabels].filter(Boolean).join("\n");
 
     // SSE stream
     const encoder = new TextEncoder();
@@ -140,7 +190,7 @@ export async function POST(request: Request) {
             ...thread!.messages,
             {
               role: "user",
-              content: message,
+              content: storageContent,
               timestamp: new Date().toISOString(),
             },
             {
