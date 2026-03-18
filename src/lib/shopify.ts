@@ -69,8 +69,14 @@ export async function gql<T = Record<string, unknown>>(
     }
 
     const json = await resp.json();
-    if (json.errors) {
+    if (json.errors?.length) {
       console.error("GraphQL errors:", json.errors);
+      // If data is entirely null/empty, throw so callers get a real error
+      const hasData = json.data && Object.values(json.data).some((v: unknown) => v !== null);
+      if (!hasData) {
+        const msg = json.errors.map((e: { message: string }) => e.message).join("; ");
+        throw new Error(`Shopify API error: ${msg}`);
+      }
     }
     return (json.data ?? {}) as T;
   }

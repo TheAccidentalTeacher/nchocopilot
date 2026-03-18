@@ -476,6 +476,9 @@ async function executeTagProduct(input: ToolInput): Promise<string> {
     { input: { id: productId, tags: newTags } }
   );
 
+  if (!data.productUpdate) {
+    return JSON.stringify({ error: "Shopify rejected the update — check that write_products scope is enabled" });
+  }
   if (data.productUpdate.userErrors.length > 0) {
     return JSON.stringify({ error: data.productUpdate.userErrors[0].message });
   }
@@ -553,6 +556,9 @@ async function executeUpdateProduct(input: ToolInput): Promise<string> {
     { input: mutationInput }
   );
 
+  if (!data.productUpdate) {
+    return JSON.stringify({ error: "Shopify rejected the update — check that write_products scope is enabled" });
+  }
   if (data.productUpdate.userErrors.length > 0) {
     return JSON.stringify({ error: data.productUpdate.userErrors[0].message });
   }
@@ -829,6 +835,9 @@ async function executePublishBlog(input: ToolInput): Promise<string> {
     }
   );
 
+  if (!data.articleCreate) {
+    return JSON.stringify({ error: "Shopify rejected the article — check that write_content scope is enabled" });
+  }
   if (data.articleCreate.userErrors.length > 0) {
     return JSON.stringify({ error: data.articleCreate.userErrors[0].message });
   }

@@ -40,6 +40,12 @@ export async function POST(request: Request) {
       }
     );
 
+    if (!data.productUpdate) {
+      return NextResponse.json(
+        { error: "Shopify rejected the update — check that write_products scope is enabled" },
+        { status: 403 }
+      );
+    }
     if (data.productUpdate.userErrors.length > 0) {
       return NextResponse.json(
         { error: data.productUpdate.userErrors[0].message },

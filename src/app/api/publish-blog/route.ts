@@ -69,6 +69,12 @@ export async function POST(request: Request) {
       }
     );
 
+    if (!data.articleCreate) {
+      return NextResponse.json(
+        { error: "Shopify rejected the article — check that write_content scope is enabled" },
+        { status: 403 }
+      );
+    }
     if (data.articleCreate.userErrors.length > 0) {
       return NextResponse.json(
         { error: data.articleCreate.userErrors[0].message },
