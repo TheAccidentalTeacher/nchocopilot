@@ -50,6 +50,9 @@ export async function fetchProducts(): Promise<ShopifyProduct[]> {
               edges { node { url altText width height } }
             }
             seo { title description }
+            metafields(first: 20) {
+              edges { node { namespace key value type } }
+            }
             createdAt updatedAt publishedAt
           }
         }

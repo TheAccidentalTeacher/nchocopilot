@@ -30,7 +30,7 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
         filter: {
           type: "string",
           description:
-            'Filter type: "all", "no-seo", "no-tags", "vendor-issues", "no-description", "by-tag", "by-vendor", "by-type", "search"',
+            'Filter type: "all", "no-seo", "no-tags", "vendor-issues", "no-description", "no-category", "no-metafields", "by-tag", "by-vendor", "by-type", "search"',
         },
         value: {
           type: "string",
@@ -274,6 +274,47 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
       required: ["title", "body"],
     },
   },
+  {
+    name: "update_metafields",
+    description:
+      "Read or write metafield values on a Shopify product. Known custom metafields (namespace: custom): collapsible_headline_1 (Included/Details), collapsible_headline_2_author_brand (Author/Brand), collapsible_text_1, collapsible_text_2. All are single_line_text_field type. Can also write any future metafields Anna creates — just use the correct namespace and key.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        productId: {
+          type: "string",
+          description: "Shopify product GID",
+        },
+        metafields: {
+          type: "array",
+          description: "Array of metafields to write",
+          items: {
+            type: "object" as const,
+            properties: {
+              namespace: {
+                type: "string",
+                description: "Metafield namespace (usually 'custom' for Anna's fields)",
+              },
+              key: {
+                type: "string",
+                description: "Metafield key (e.g. 'collapsible_headline_1', 'collapsible_text_2')",
+              },
+              value: {
+                type: "string",
+                description: "Value to write",
+              },
+              type: {
+                type: "string",
+                description: "Metafield type (default: 'single_line_text_field')",
+              },
+            },
+            required: ["namespace", "key", "value"],
+          },
+        },
+      },
+      required: ["productId", "metafields"],
+    },
+  },
 ];
 
 // ── Tool Executors ──
@@ -326,6 +367,8 @@ export async function executeTool(
       return executeSearchWeb(input);
     case "publish_blog":
       return executePublishBlog(input);
+    case "update_metafields":
+      return executeUpdateMetafields(input);
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` });
   }
@@ -397,6 +440,13 @@ async function executeFetchProducts(input: ToolInput): Promise<string> {
     case "no-category":
       filtered = products.filter((p) => !p.category);
       break;
+    case "no-metafields":
+      filtered = products.filter((p) => {
+        const mfs = p.metafields?.edges?.map((e) => e.node) || [];
+        const customMfs = mfs.filter((m) => m.namespace === "custom");
+        return customMfs.length === 0;
+      });
+      break;
     case "by-tag":
       filtered = products.filter((p) =>
         p.tags.some((t) => t.toLowerCase().includes(value.toLowerCase()))
@@ -428,18 +478,24 @@ async function executeFetchProducts(input: ToolInput): Promise<string> {
   return JSON.stringify({
     total: filtered.length,
     showing: subset.length,
-    products: subset.map((p) => ({
-      id: p.id,
-      title: p.title,
-      vendor: p.vendor,
-      productType: p.productType,
-      category: p.category?.fullName || null,
-      tags: p.tags,
-      hasSeo: !!(p.seo?.title || p.seo?.description),
-      hasDescription: !!p.descriptionHtml?.trim(),
-      price: p.priceRangeV2?.minVariantPrice?.amount,
-      status: p.status,
-    })),
+    products: subset.map((p) => {
+      const mfs = p.metafields?.edges?.map((e) => e.node) || [];
+      return {
+        id: p.id,
+        title: p.title,
+        vendor: p.vendor,
+        productType: p.productType,
+        category: p.category?.fullName || null,
+        tags: p.tags,
+        hasSeo: !!(p.seo?.title || p.seo?.description),
+        hasDescription: !!p.descriptionHtml?.trim(),
+        price: p.priceRangeV2?.minVariantPrice?.amount,
+        status: p.status,
+        metafields: mfs.length > 0
+          ? Object.fromEntries(mfs.map((m) => [`${m.namespace}.${m.key}`, m.value]))
+          : null,
+      };
+    }),
   });
 }
 
@@ -886,5 +942,95 @@ async function executePublishBlog(input: ToolInput): Promise<string> {
     success: true,
     article: data.articleCreate.article,
     message: `Published "${title}" to the store blog.`,
+  });
+}
+
+async function executeUpdateMetafields(input: ToolInput): Promise<string> {
+  const productId = input.productId as string;
+  const metafields = input.metafields as Array<{
+    namespace: string;
+    key: string;
+    value: string;
+    type?: string;
+  }>;
+
+  if (!metafields || metafields.length === 0) {
+    return JSON.stringify({ error: "No metafields provided" });
+  }
+
+  const products = await getCachedProducts();
+  const product = products.find((p) => p.id === productId);
+  if (!product) {
+    return JSON.stringify({ error: `Product not found: ${productId}` });
+  }
+
+  // Get current metafield values for logging
+  const currentMfs = product.metafields?.edges?.map((e) => e.node) || [];
+
+  const data = await gql<{
+    productUpdate: {
+      product: {
+        id: string;
+        metafields: {
+          edges: Array<{ node: { namespace: string; key: string; value: string } }>;
+        };
+      } | null;
+      userErrors: Array<{ field: string[]; message: string }>;
+    };
+  }>(
+    `mutation productUpdate($input: ProductInput!) {
+      productUpdate(input: $input) {
+        product {
+          id
+          metafields(first: 20) {
+            edges { node { namespace key value } }
+          }
+        }
+        userErrors { field message }
+      }
+    }`,
+    {
+      input: {
+        id: productId,
+        metafields: metafields.map((m) => ({
+          namespace: m.namespace,
+          key: m.key,
+          value: m.value,
+          type: m.type || "single_line_text_field",
+        })),
+      },
+    }
+  );
+
+  if (!data.productUpdate) {
+    return JSON.stringify({ error: "Shopify rejected the update — check that write_products scope is enabled" });
+  }
+  if (data.productUpdate.userErrors.length > 0) {
+    return JSON.stringify({ error: data.productUpdate.userErrors[0].message });
+  }
+
+  // Log each metafield change
+  for (const mf of metafields) {
+    const oldMf = currentMfs.find((m) => m.namespace === mf.namespace && m.key === mf.key);
+    await logChange({
+      product_id: productId,
+      product_title: product.title,
+      field: `metafield:${mf.namespace}.${mf.key}`,
+      old_value: oldMf?.value || null,
+      new_value: mf.value,
+      action: "set_metafield",
+      source: "chatbot",
+      confidence: null,
+    });
+  }
+
+  invalidateProductCache();
+
+  const updatedMfs = data.productUpdate.product?.metafields?.edges?.map((e) => e.node) || [];
+  return JSON.stringify({
+    success: true,
+    product: product.title,
+    metafieldsWritten: metafields.map((m) => `${m.namespace}.${m.key}`),
+    currentMetafields: Object.fromEntries(updatedMfs.map((m) => [`${m.namespace}.${m.key}`, m.value])),
   });
 }

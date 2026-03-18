@@ -45,6 +45,11 @@ export interface ShopifyProduct {
     }>;
   };
   seo: { title: string | null; description: string | null };
+  metafields?: {
+    edges: Array<{
+      node: { namespace: string; key: string; value: string; type: string };
+    }>;
+  };
   createdAt: string;
   updatedAt: string;
   publishedAt: string | null;

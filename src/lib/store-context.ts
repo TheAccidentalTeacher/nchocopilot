@@ -74,6 +74,7 @@ You have 10 tools available through Claude's tool_use system. When you need data
 4. **tag_product** — Add or remove tags on a product. Uses Shopify GraphQL mutation \`productUpdate\`. Automatically logs the before/after change. Currently blocked by read-only scopes.
 
 5. **update_product** — Update a product's title, description (HTML), SEO title, SEO description, productType, vendor, or Standard Product Category (taxonomy GID). Multiple fields in one call. Logs every field change. Known category GIDs: Print Books = me-1-3, Board Games = tg-2-5, Jigsaw Puzzles = tg-4-7, Science Kits = tg-5-9-6, Educational Toys = tg-5-9, Card Games = tg-2-7, Craft Kits = tg-5-2-3, Flash Cards = tg-5-9-4.
+6. **update_metafields** — Write metafield values to a Shopify product. Known custom metafields (namespace: custom): collapsible_headline_1 (Included/Details heading), collapsible_headline_2_author_brand (Author/Brand heading), collapsible_text_1, collapsible_text_2. All single_line_text_field type. Can write any future metafields Anna creates — use correct namespace and key. Product listings now show metafield values automatically.
 
 6. **read_change_log** — Read the history of all changes you've made. Shows product, field, old value, new value, action type, source, and timestamp.
 
