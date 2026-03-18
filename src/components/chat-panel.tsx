@@ -54,6 +54,8 @@ export default function ChatPanel() {
   const [streamText, setStreamText] = useState("");
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [showThreads, setShowThreads] = useState(true);
+  const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [threadError, setThreadError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -117,6 +119,28 @@ export default function ChatPanel() {
         setActiveThread(null);
       }
     } catch { /* ignore */ }
+  };
+
+  const renameThread = async (id: string, newTitle: string) => {
+    const title = newTitle.trim();
+    if (!title) {
+      setEditingThreadId(null);
+      return;
+    }
+    try {
+      await fetch(`/api/threads/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      setThreads((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, title } : t))
+      );
+      if (activeThread?.id === id) {
+        setActiveThread((prev) => (prev ? { ...prev, title } : prev));
+      }
+    } catch { /* ignore */ }
+    setEditingThreadId(null);
   };
 
   // --- Attachment handling ---
@@ -352,6 +376,16 @@ export default function ChatPanel() {
                     if (threadResp.ok) {
                       const full = await threadResp.json();
                       setActiveThread(full);
+                      // Auto-title new threads based on first message
+                      if (full.title === "New Chat" && msg) {
+                        const autoTitle = msg.slice(0, 50) + (msg.length > 50 ? "…" : "");
+                        fetch(`/api/threads/${threadId}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ title: autoTitle }),
+                        }).catch(() => {});
+                        setActiveThread({ ...full, title: autoTitle });
+                      }
                     }
                   } catch { /* ignore */ }
                 }
@@ -424,11 +458,42 @@ export default function ChatPanel() {
                       : "text-pink-600"
                   }`}
                 >
+                  {editingThreadId === t.id ? (
+                    <input
+                      autoFocus
+                      className="flex-1 text-sm bg-white border border-pink-300 rounded px-1 py-0.5 text-pink-800 outline-none focus:border-pink-500"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") renameThread(t.id, editTitle);
+                        if (e.key === "Escape") setEditingThreadId(null);
+                      }}
+                      onBlur={() => renameThread(t.id, editTitle)}
+                    />
+                  ) : (
+                    <button
+                      onClick={() => selectThread(t)}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setEditingThreadId(t.id);
+                        setEditTitle(t.title);
+                      }}
+                      className="flex-1 text-left truncate"
+                      title="Double-click to rename"
+                    >
+                      {t.title}
+                    </button>
+                  )}
                   <button
-                    onClick={() => selectThread(t)}
-                    className="flex-1 text-left truncate"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingThreadId(t.id);
+                      setEditTitle(t.title);
+                    }}
+                    className="hidden group-hover:block text-pink-300 hover:text-pink-600 ml-1"
+                    title="Rename"
                   >
-                    {t.title}
+                    ✎
                   </button>
                   <button
                     onClick={(e) => {
@@ -468,6 +533,19 @@ export default function ChatPanel() {
           <span className="text-sm font-medium text-pink-700 truncate">
             {activeThread?.title || "New Chat"}
           </span>
+          {activeThread && (
+            <button
+              onClick={() => {
+                setEditingThreadId(activeThread.id);
+                setEditTitle(activeThread.title);
+                setShowThreads(true);
+              }}
+              className="text-pink-300 hover:text-pink-600 text-xs"
+              title="Rename chat"
+            >
+              ✎
+            </button>
+          )}
         </div>
 
         {/* Messages */}
