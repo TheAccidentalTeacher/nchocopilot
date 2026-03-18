@@ -30,6 +30,7 @@ export async function fetchProducts(): Promise<ShopifyProduct[]> {
           cursor
           node {
             id title handle status vendor productType
+            category { id name fullName }
             tags descriptionHtml
             totalInventory
             priceRangeV2 {

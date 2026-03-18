@@ -113,6 +113,10 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
           type: "string",
           description: "Product vendor/publisher name",
         },
+        category: {
+          type: "string",
+          description: "Shopify Standard Product Category GID. Known GIDs: Print Books = gid://shopify/TaxonomyCategory/me-1-3, Board Games = gid://shopify/TaxonomyCategory/tg-2-5, Jigsaw Puzzles = gid://shopify/TaxonomyCategory/tg-4-7, Science Kits = gid://shopify/TaxonomyCategory/tg-5-9-6, Educational Toys = gid://shopify/TaxonomyCategory/tg-5-9, Card Games = gid://shopify/TaxonomyCategory/tg-2-7, Craft Kits = gid://shopify/TaxonomyCategory/tg-5-2-3, Flash Cards = gid://shopify/TaxonomyCategory/tg-5-9-4",
+        },
       },
       required: ["productId"],
     },
@@ -390,6 +394,9 @@ async function executeFetchProducts(input: ToolInput): Promise<string> {
     case "no-description":
       filtered = products.filter((p) => !p.descriptionHtml?.trim());
       break;
+    case "no-category":
+      filtered = products.filter((p) => !p.category);
+      break;
     case "by-tag":
       filtered = products.filter((p) =>
         p.tags.some((t) => t.toLowerCase().includes(value.toLowerCase()))
@@ -426,6 +433,7 @@ async function executeFetchProducts(input: ToolInput): Promise<string> {
       title: p.title,
       vendor: p.vendor,
       productType: p.productType,
+      category: p.category?.fullName || null,
       tags: p.tags,
       hasSeo: !!(p.seo?.title || p.seo?.description),
       hasDescription: !!p.descriptionHtml?.trim(),
@@ -539,6 +547,7 @@ async function executeUpdateProduct(input: ToolInput): Promise<string> {
   if (input.descriptionHtml) mutationInput.descriptionHtml = input.descriptionHtml;
   if (input.productType) mutationInput.productType = input.productType;
   if (input.vendor) mutationInput.vendor = input.vendor;
+  if (input.category) mutationInput.category = input.category;
   if (input.seoTitle || input.seoDescription) {
     mutationInput.seo = {
       title: (input.seoTitle as string) || product.seo?.title || "",
@@ -644,6 +653,19 @@ async function executeUpdateProduct(input: ToolInput): Promise<string> {
       old_value: product.vendor,
       new_value: input.vendor as string,
       action: "update_vendor",
+      source: "chatbot",
+      confidence: null,
+    });
+  }
+  if (input.category) {
+    fieldsChanged.push("category");
+    await logChange({
+      product_id: productId,
+      product_title: product.title,
+      field: "category",
+      old_value: product.category?.fullName || null,
+      new_value: input.category as string,
+      action: "set_category",
       source: "chatbot",
       confidence: null,
     });

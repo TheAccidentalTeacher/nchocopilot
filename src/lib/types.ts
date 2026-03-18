@@ -17,6 +17,7 @@ export interface ShopifyProduct {
   status: string;
   vendor: string;
   productType: string;
+  category?: { id: string; name: string; fullName: string } | null;
   tags: string[];
   descriptionHtml: string;
   totalInventory: number;
