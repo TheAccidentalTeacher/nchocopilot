@@ -40,11 +40,13 @@ export interface ToolCallRecord {
   result: string;
 }
 
-export async function getThreads(): Promise<ChatThread[]> {
-  const { data, error } = await db()
+export async function getThreads(userId?: string): Promise<ChatThread[]> {
+  let query = db()
     .from("ncho_chat_threads")
     .select("*")
     .order("updated_at", { ascending: false });
+  if (userId) query = query.eq("user_id", userId);
+  const { data, error } = await query;
   if (error) throw error;
   return data ?? [];
 }
@@ -59,10 +61,12 @@ export async function getThread(id: string): Promise<ChatThread | null> {
   return data;
 }
 
-export async function createThread(title?: string): Promise<ChatThread> {
+export async function createThread(title?: string, userId?: string): Promise<ChatThread> {
+  const row: Record<string, unknown> = { title: title || "New Chat", messages: [] };
+  if (userId) row.user_id = userId;
   const { data, error } = await db()
     .from("ncho_chat_threads")
-    .insert({ title: title || "New Chat", messages: [] })
+    .insert(row)
     .select()
     .single();
   if (error) throw error;

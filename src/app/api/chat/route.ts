@@ -12,6 +12,7 @@ import {
   type ChatMessage,
   type ToolCallRecord,
 } from "@/lib/supabase";
+import { getAuthUser } from "@/lib/auth-helpers";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -28,13 +29,15 @@ export async function POST(request: Request) {
     }
 
     // Get or create thread
+    const user = await getAuthUser();
     let thread = threadId ? await getThread(threadId) : null;
     if (!thread) {
-      thread = await createThread();
+      thread = await createThread(undefined, user?.id);
     }
 
     // Build context
-    const systemPrompt = await buildLiveContext();
+    const userName = user?.email?.split("@")[0] || "user";
+    const systemPrompt = await buildLiveContext() + `\n\nThe current user is ${userName}.`;
 
     // Build message history from thread + new message
     const historyMessages: Anthropic.MessageParam[] = [];

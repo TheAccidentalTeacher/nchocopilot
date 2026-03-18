@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS ncho_chat_threads (
   title       TEXT DEFAULT 'New Chat',
   messages    JSONB DEFAULT '[]'::jsonb,
   pinned      BOOLEAN DEFAULT false,
+  user_id     UUID,  -- Supabase Auth user ID (Scott or Anna)
   created_at  TIMESTAMPTZ DEFAULT now(),
   updated_at  TIMESTAMPTZ DEFAULT now()
 );
@@ -63,3 +64,9 @@ CREATE INDEX IF NOT EXISTS idx_ncho_change_log_created ON ncho_change_log(create
 CREATE INDEX IF NOT EXISTS idx_ncho_store_memory_category ON ncho_store_memory(category);
 CREATE INDEX IF NOT EXISTS idx_ncho_cost_tracking_created ON ncho_cost_tracking(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ncho_chat_threads_updated ON ncho_chat_threads(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ncho_chat_threads_user ON ncho_chat_threads(user_id);
+
+-- Migration: Add user_id to existing ncho_chat_threads table
+-- Run this if the table already exists:
+-- ALTER TABLE ncho_chat_threads ADD COLUMN IF NOT EXISTS user_id UUID;
+-- CREATE INDEX IF NOT EXISTS idx_ncho_chat_threads_user ON ncho_chat_threads(user_id);
