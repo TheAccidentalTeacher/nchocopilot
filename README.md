@@ -23,6 +23,7 @@ An internal tool built for Anna (and Scott) to manage the NCHO Shopify store thr
 
 - **Dashboard** — Store health cards (product count, SEO coverage, vendor issues, collections, blog count)
 - **Products** — Product table with SEO generation modals
+- **Change Log** — Visual timeline of every AI change with per-entry undo, freshness checks, conflict detection, filters, pagination
 - **Blog** — AI blog post generator + publish to Shopify
 - **Policies** — Pre-written store policies (copy or push to Shopify)
 - **Settings** — Shopify connection status + active scopes

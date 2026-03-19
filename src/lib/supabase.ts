@@ -3,7 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let _client: SupabaseClient | null = null;
 
-function db(): SupabaseClient {
+export function db(): SupabaseClient {
   if (_client) return _client;
   const url = process.env.NCHO_SUPABASE_URL;
   const key = process.env.NCHO_SUPABASE_SERVICE_ROLE_KEY;

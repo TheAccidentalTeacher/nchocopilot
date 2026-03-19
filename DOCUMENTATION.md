@@ -599,6 +599,8 @@ Shopify connection diagnostics.
 | DELETE | `/api/threads/[id]` | Delete a thread | Supabase | None |
 | POST | `/api/sync` | Invalidate product cache + re-fetch stats | Shopify token | Forces refresh |
 | GET | `/api/cost` | Cost tracking summary (today/month/all-time) | Supabase | None |
+| GET | `/api/changes` | Change log entries with optional filters (field, action, productId) + pagination | Supabase | None |
+| POST | `/api/undo` | Undo a single change log entry — freshness check against live Shopify, conflict detection, force override | Shopify + Supabase | Writes undo entry to change log |
 
 ---
 
@@ -620,6 +622,7 @@ The entire app uses a **pink/sky/emerald** palette:
 | `/login` | Login | `src/app/login/page.tsx` |
 | `/` | Dashboard | `src/app/page.tsx` |
 | `/products` | Product Manager | `src/app/products/page.tsx` |
+| `/changes` | Change Log | `src/app/changes/page.tsx` |
 | `/blog` | Blog Publisher | `src/app/blog/page.tsx` |
 | `/policies` | Policy Manager | `src/app/policies/page.tsx` |
 | `/settings` | Settings | `src/app/settings/page.tsx` |
@@ -628,7 +631,8 @@ The entire app uses a **pink/sky/emerald** palette:
 Left sidebar (always visible, 224px wide):
 - 📊 Dashboard
 - 📦 Products
-- 📝 Blog
+- � Change Log
+- �📝 Blog
 - 📋 Policies
 - ⚙️ Settings
 - User display (first name from email) + Logout button
@@ -897,6 +901,9 @@ These rules are enforced in three locations:
 - [x] Collection creation tool (smart + manual with rules)
 - [x] Metafield definition creation tool (store-level field setup)
 - [x] Undo tool — reverses recent tag/SEO/description/title/vendor changes using change log old values
+- [x] Change Log page — visual timeline of every AI change, grouped by day, expandable before/after diff, per-entry undo buttons
+- [x] Undo API (`/api/undo`) — freshness check against live Shopify values, conflict detection modal, force override option
+- [x] Changes API (`/api/changes`) — paginated change log with server-side field/action/product filters
 
 ### UX Features (Complete & Deployed)
 - [x] Thinking indicator — animated bouncing dots + context-aware status text
