@@ -377,6 +377,46 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
       required: ["title"],
     },
   },
+  {
+    name: "create_metafield_definition",
+    description:
+      "Create a metafield definition at the store level so it appears as a named field in Shopify Admin for all products (or collections, etc). This makes the metafield visible and editable in Shopify's admin UI. Use this BEFORE writing values with update_metafields if the field doesn't exist yet.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: {
+          type: "string",
+          description: "Display name shown in Shopify Admin (e.g. 'Product Information')",
+        },
+        namespace: {
+          type: "string",
+          description: "Metafield namespace (usually 'custom')",
+        },
+        key: {
+          type: "string",
+          description: "Metafield key (e.g. 'product_information'). Must be unique within namespace+ownerType.",
+        },
+        type: {
+          type: "string",
+          description:
+            "Metafield type: single_line_text_field, multi_line_text_field, rich_text_field, number_integer, number_decimal, boolean, url, date, json, color, etc.",
+        },
+        ownerType: {
+          type: "string",
+          description: "Owner type: PRODUCT, COLLECTION, CUSTOMER, ORDER, SHOP. Default: PRODUCT.",
+        },
+        description: {
+          type: "string",
+          description: "Optional description shown in Shopify Admin under the field name.",
+        },
+        pin: {
+          type: "boolean",
+          description: "If true, pins the metafield so it shows prominently in Shopify Admin. Default: true.",
+        },
+      },
+      required: ["name", "namespace", "key", "type"],
+    },
+  },
 ];
 
 // ── Tool Executors ──
@@ -433,6 +473,8 @@ export async function executeTool(
       return executeUpdateMetafields(input);
     case "create_collection":
       return executeCreateCollection(input);
+    case "create_metafield_definition":
+      return executeCreateMetafieldDefinition(input);
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` });
   }
@@ -1201,6 +1243,100 @@ async function executeCreateCollection(input: ToolInput): Promise<string> {
       productsCount: collection.productsCount?.count ?? 0,
       rules: collection.ruleSet?.rules || [],
       url: `https://next-chapter-homeschool.myshopify.com/collections/${collection.handle}`,
+    },
+  });
+}
+
+async function executeCreateMetafieldDefinition(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  const namespace = input.namespace as string;
+  const key = input.key as string;
+  const type = input.type as string;
+  const ownerType = (input.ownerType as string) || "PRODUCT";
+  const description = (input.description as string) || "";
+  const pin = (input.pin as boolean) ?? true;
+
+  const data = await gql<{
+    metafieldDefinitionCreate: {
+      createdDefinition: {
+        id: string;
+        name: string;
+        namespace: string;
+        key: string;
+        type: { name: string };
+      } | null;
+      userErrors: Array<{ field: string[]; message: string; code: string }>;
+    };
+  }>(
+    `mutation metafieldDefinitionCreate($definition: MetafieldDefinitionInput!) {
+      metafieldDefinitionCreate(definition: $definition) {
+        createdDefinition {
+          id
+          name
+          namespace
+          key
+          type { name }
+        }
+        userErrors { field message code }
+      }
+    }`,
+    {
+      definition: {
+        name,
+        namespace,
+        key,
+        type,
+        ownerType,
+        ...(description ? { description } : {}),
+        ...(pin ? { pin: true } : {}),
+      },
+    }
+  );
+
+  if (!data.metafieldDefinitionCreate) {
+    return JSON.stringify({
+      error: "Shopify rejected the request — check that write_metafield_definitions scope is enabled",
+    });
+  }
+  if (data.metafieldDefinitionCreate.userErrors.length > 0) {
+    const err = data.metafieldDefinitionCreate.userErrors[0];
+    if (err.code === "TAKEN") {
+      return JSON.stringify({
+        success: true,
+        alreadyExists: true,
+        message: `Metafield definition ${namespace}.${key} already exists for ${ownerType}. You can write values to it with update_metafields.`,
+      });
+    }
+    return JSON.stringify({ error: err.message });
+  }
+
+  const def = data.metafieldDefinitionCreate.createdDefinition!;
+
+  await logChange({
+    product_id: "store",
+    product_title: name,
+    field: "metafield_definition",
+    old_value: null,
+    new_value: JSON.stringify({
+      namespace,
+      key,
+      type,
+      ownerType,
+    }),
+    action: "create_metafield_definition",
+    source: "chatbot",
+    confidence: null,
+  });
+
+  return JSON.stringify({
+    success: true,
+    definition: {
+      id: def.id,
+      name: def.name,
+      namespace: def.namespace,
+      key: def.key,
+      type: def.type.name,
+      ownerType,
     },
   });
 }
