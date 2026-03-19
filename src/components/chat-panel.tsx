@@ -59,9 +59,12 @@ export default function ChatPanel() {
   const [syncing, setSyncing] = useState(false);
   const [threadError, setThreadError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [queuedMessage, setQueuedMessage] = useState<{ text: string; attachments: Attachment[] } | null>(null);
+  const [listening, setListening] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   // Load threads on mount
   useEffect(() => {
@@ -254,7 +257,15 @@ export default function ChatPanel() {
 
   const sendMessage = useCallback(async () => {
     const msg = input.trim();
-    if ((!msg && attachments.length === 0) || streaming) return;
+    if (!msg && attachments.length === 0) return;
+
+    // If already streaming, queue this message for after
+    if (streaming) {
+      setQueuedMessage({ text: msg, attachments: [...attachments] });
+      setInput("");
+      setAttachments([]);
+      return;
+    }
 
     const currentAttachments = [...attachments];
     setInput("");
@@ -410,6 +421,78 @@ export default function ChatPanel() {
       setStreaming(false);
     }
   }, [input, streaming, activeThread, attachments]);
+
+  // Process queued message after streaming ends
+  useEffect(() => {
+    if (!streaming && queuedMessage) {
+      const { text, attachments: qAttachments } = queuedMessage;
+      setQueuedMessage(null);
+      // Populate input and attachments, then trigger send on next tick
+      setInput(text);
+      setAttachments(qAttachments);
+      const timer = setTimeout(() => {
+        // sendMessage reads from state, so we need to trigger it after state settles
+        document.getElementById("ncho-send-btn")?.click();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [streaming, queuedMessage]);
+
+  // Voice input
+  const toggleVoice = useCallback(() => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice input is not supported in this browser. Try Chrome or Edge.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    let finalTranscript = "";
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+      setInput((prev) => {
+        const base = prev.replace(/\[listening\.\.\.\].*$/, "").trimEnd();
+        const space = base ? " " : "";
+        if (finalTranscript) {
+          return base + space + finalTranscript + (interim ? " " + interim : "");
+        }
+        return base + (interim ? space + interim : "");
+      });
+    };
+
+    recognition.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+      inputRef.current?.focus();
+    };
+
+    recognition.onerror = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
+
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
+  }, [listening]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -651,6 +734,27 @@ export default function ChatPanel() {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Thinking indicator bar */}
+        {streaming && (
+          <div className="px-4 py-2 border-t border-pink-100 bg-gradient-to-r from-pink-50 via-sky-50 to-pink-50 flex items-center gap-2">
+            <div className="flex gap-1">
+              <span className="w-2 h-2 bg-pink-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="w-2 h-2 bg-pink-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="w-2 h-2 bg-pink-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+            </div>
+            <span className="text-xs text-pink-500 font-medium">
+              {toolEvents.length > 0 && !toolEvents[toolEvents.length - 1].result
+                ? `Working on it — using ${toolEvents[toolEvents.length - 1].tool}...`
+                : streamText
+                  ? "Writing response..."
+                  : "Thinking..."}
+            </span>
+            {queuedMessage && (
+              <span className="text-xs text-sky-500 ml-auto">Your next message is queued ✓</span>
+            )}
+          </div>
+        )}
+
         {/* Input */}
         <div className="p-4 border-t border-pink-100 bg-white/60">
           {/* Attachment previews */}
@@ -696,12 +800,28 @@ export default function ChatPanel() {
             {/* Attach button */}
             <button
               onClick={() => fileInputRef.current?.click()}
-              disabled={streaming}
-              className="px-2.5 py-2.5 text-pink-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors disabled:opacity-50"
+              className="px-2.5 py-2.5 text-pink-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors"
               title="Attach file or image (or paste a screenshot)"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+              </svg>
+            </button>
+            {/* Voice input button */}
+            <button
+              onClick={toggleVoice}
+              className={`px-2.5 py-2.5 rounded-xl transition-colors ${
+                listening
+                  ? "text-red-500 bg-red-50 hover:bg-red-100 animate-pulse"
+                  : "text-pink-400 hover:text-pink-600 hover:bg-pink-50"
+              }`}
+              title={listening ? "Stop listening" : "Voice input"}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
               </svg>
             </button>
             <textarea
@@ -710,9 +830,19 @@ export default function ChatPanel() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              placeholder={attachments.length > 0 ? "Add a message about these files..." : "Ask Anna's assistant anything... (paste screenshots here!)"}
+              placeholder={
+                listening
+                  ? "Listening..."
+                  : streaming
+                    ? "Type to queue your next message..."
+                    : attachments.length > 0
+                      ? "Add a message about these files..."
+                      : "Ask Anna's assistant anything... (paste screenshots here!)"
+              }
               rows={1}
-              className="flex-1 resize-none border border-pink-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-pink-400 focus:border-pink-400 placeholder:text-pink-300"
+              className={`flex-1 resize-none border rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-pink-400 focus:border-pink-400 placeholder:text-pink-300 ${
+                listening ? "border-red-300 bg-red-50/30" : "border-pink-200"
+              }`}
               style={{ minHeight: "42px", maxHeight: "120px" }}
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement;
@@ -721,11 +851,12 @@ export default function ChatPanel() {
               }}
             />
             <button
+              id="ncho-send-btn"
               onClick={sendMessage}
-              disabled={streaming || (!input.trim() && attachments.length === 0)}
+              disabled={!input.trim() && attachments.length === 0}
               className="px-4 py-2.5 bg-pink-500 text-white rounded-xl hover:bg-pink-600 disabled:opacity-50 transition-colors text-sm font-medium"
             >
-              {streaming ? "..." : "Send"}
+              {streaming ? (queuedMessage ? "Queued ✓" : "Queue") : "Send"}
             </button>
           </div>
         </div>
