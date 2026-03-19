@@ -315,6 +315,68 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
       required: ["productId", "metafields"],
     },
   },
+  {
+    name: "create_collection",
+    description:
+      "Create a new Shopify collection. Smart collections use rules to auto-include matching products (e.g. by tag, vendor, product type, title, inventory). Manual collections have no rules — products are added separately. Common rule columns: TAG, TITLE, TYPE, VENDOR, VARIANT_PRICE, VARIANT_INVENTORY, VARIANT_WEIGHT. Common relations: EQUALS, NOT_EQUALS, GREATER_THAN, LESS_THAN, STARTS_WITH, ENDS_WITH, CONTAINS, NOT_CONTAINS, IS_SET, IS_NOT_SET.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: {
+          type: "string",
+          description: "Collection title",
+        },
+        descriptionHtml: {
+          type: "string",
+          description: "Collection description (HTML)",
+        },
+        rules: {
+          type: "array",
+          description:
+            "Smart collection rules. If provided, creates a smart (automated) collection. Each rule has column, relation, condition.",
+          items: {
+            type: "object" as const,
+            properties: {
+              column: {
+                type: "string",
+                description:
+                  "Rule column: TAG, TITLE, TYPE, VENDOR, VARIANT_PRICE, VARIANT_INVENTORY, etc.",
+              },
+              relation: {
+                type: "string",
+                description:
+                  "Rule relation: EQUALS, NOT_EQUALS, GREATER_THAN, LESS_THAN, CONTAINS, NOT_CONTAINS, STARTS_WITH, ENDS_WITH, IS_SET, IS_NOT_SET",
+              },
+              condition: {
+                type: "string",
+                description: "Rule condition value (e.g. tag name, vendor name, price threshold)",
+              },
+            },
+            required: ["column", "relation", "condition"],
+          },
+        },
+        disjunctive: {
+          type: "boolean",
+          description:
+            "For smart collections: true = product matches ANY rule (OR), false = product must match ALL rules (AND). Default: false.",
+        },
+        sortOrder: {
+          type: "string",
+          description:
+            "Sort order: ALPHA_ASC, ALPHA_DESC, BEST_SELLING, CREATED, CREATED_DESC, MANUAL, PRICE_ASC, PRICE_DESC. Default: BEST_SELLING.",
+        },
+        seoTitle: {
+          type: "string",
+          description: "SEO title for the collection (under 60 chars)",
+        },
+        seoDescription: {
+          type: "string",
+          description: "SEO meta description for the collection (under 155 chars)",
+        },
+      },
+      required: ["title"],
+    },
+  },
 ];
 
 // ── Tool Executors ──
@@ -369,6 +431,8 @@ export async function executeTool(
       return executePublishBlog(input);
     case "update_metafields":
       return executeUpdateMetafields(input);
+    case "create_collection":
+      return executeCreateCollection(input);
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` });
   }
@@ -1032,5 +1096,111 @@ async function executeUpdateMetafields(input: ToolInput): Promise<string> {
     product: product.title,
     metafieldsWritten: metafields.map((m) => `${m.namespace}.${m.key}`),
     currentMetafields: Object.fromEntries(updatedMfs.map((m) => [`${m.namespace}.${m.key}`, m.value])),
+  });
+}
+
+async function executeCreateCollection(input: ToolInput): Promise<string> {
+  const title = input.title as string;
+  const descriptionHtml = (input.descriptionHtml as string) || "";
+  const rules = (input.rules as Array<{ column: string; relation: string; condition: string }>) || [];
+  const disjunctive = (input.disjunctive as boolean) ?? false;
+  const sortOrder = (input.sortOrder as string) || "BEST_SELLING";
+  const seoTitle = input.seoTitle as string | undefined;
+  const seoDescription = input.seoDescription as string | undefined;
+
+  const collectionInput: Record<string, unknown> = {
+    title,
+    descriptionHtml,
+    sortOrder,
+  };
+
+  if (rules.length > 0) {
+    collectionInput.ruleSet = {
+      appliedDisjunctively: disjunctive,
+      rules: rules.map((r) => ({
+        column: r.column,
+        relation: r.relation,
+        condition: r.condition,
+      })),
+    };
+  }
+
+  if (seoTitle || seoDescription) {
+    collectionInput.seo = {
+      ...(seoTitle ? { title: seoTitle } : {}),
+      ...(seoDescription ? { description: seoDescription } : {}),
+    };
+  }
+
+  const data = await gql<{
+    collectionCreate: {
+      collection: {
+        id: string;
+        title: string;
+        handle: string;
+        productsCount: { count: number };
+        ruleSet: {
+          appliedDisjunctively: boolean;
+          rules: Array<{ column: string; relation: string; condition: string }>;
+        } | null;
+      } | null;
+      userErrors: Array<{ field: string[]; message: string }>;
+    };
+  }>(
+    `mutation collectionCreate($input: CollectionInput!) {
+      collectionCreate(input: $input) {
+        collection {
+          id
+          title
+          handle
+          productsCount { count }
+          ruleSet {
+            appliedDisjunctively
+            rules { column relation condition }
+          }
+        }
+        userErrors { field message }
+      }
+    }`,
+    { input: collectionInput }
+  );
+
+  if (!data.collectionCreate) {
+    return JSON.stringify({
+      error: "Shopify rejected the request — check that write_products scope is enabled",
+    });
+  }
+  if (data.collectionCreate.userErrors.length > 0) {
+    return JSON.stringify({ error: data.collectionCreate.userErrors[0].message });
+  }
+
+  const collection = data.collectionCreate.collection!;
+
+  await logChange({
+    product_id: collection.id,
+    product_title: collection.title,
+    field: "collection",
+    old_value: null,
+    new_value: JSON.stringify({
+      handle: collection.handle,
+      type: rules.length > 0 ? "smart" : "manual",
+      rules: rules.length > 0 ? rules : undefined,
+    }),
+    action: "create_collection",
+    source: "chatbot",
+    confidence: null,
+  });
+
+  return JSON.stringify({
+    success: true,
+    collection: {
+      id: collection.id,
+      title: collection.title,
+      handle: collection.handle,
+      type: rules.length > 0 ? "smart" : "manual",
+      productsCount: collection.productsCount?.count ?? 0,
+      rules: collection.ruleSet?.rules || [],
+      url: `https://next-chapter-homeschool.myshopify.com/collections/${collection.handle}`,
+    },
   });
 }

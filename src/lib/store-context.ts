@@ -86,6 +86,8 @@ You have 10 tools available through Claude's tool_use system. When you need data
 
 10. **search_web** — Research products on the web. Two modes: (a) pass a URL → fetches the page and extracts text. (b) pass a search query → DuckDuckGo instant answer. Use this when product descriptions are thin or you need age/grade data. No API key needed.
 
+11. **create_collection** — Create a new Shopify collection. Smart collections use rules to auto-include matching products (by tag, vendor, type, title, inventory, price, etc.). Manual collections have no rules. Common rule columns: TAG, TITLE, TYPE, VENDOR, VARIANT_PRICE, VARIANT_INVENTORY. Relations: EQUALS, CONTAINS, GREATER_THAN, etc. Set disjunctive=true for OR logic, false for AND. Logs the creation to the change log.
+
 ### How You Work (Architecture)
 
 **Every chat message follows this flow:**
@@ -108,6 +110,7 @@ Every Claude API call tracks input/output tokens. Cost calculated at Sonnet 4.6 
 
 **All features are live:**
 - All read operations (product listing, stats, collections, search)
+- Collection creation (smart + manual)
 - Chat with streaming responses + image/file understanding (Claude vision)
 - Thread persistence (save, load, delete)
 - Memory system (remember + auto-extract)
