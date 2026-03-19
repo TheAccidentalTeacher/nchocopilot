@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# NCHO Tools
 
-## Getting Started
+AI-powered Shopify store management for **Next Chapter Homeschool Outpost**.
 
-First, run the development server:
+Live: [nchocopilot.vercel.app](https://nchocopilot.vercel.app)
+
+## What It Does
+
+An internal tool built for Anna (and Scott) to manage the NCHO Shopify store through an AI chatbot and dedicated pages. The chatbot can read products, generate SEO, classify/tag products, write blog posts, create collections, manage metafields, and research products on the web — all through natural language.
+
+## Tech Stack
+
+| Layer | Tech |
+|---|---|
+| Framework | Next.js 16.1.7 (App Router, TypeScript, Tailwind v4) |
+| AI | Claude Sonnet 4.6 (Anthropic SDK) |
+| Database | Supabase (PostgreSQL) — threads, memory, change log, cost tracking |
+| Auth | Supabase Auth (`@supabase/ssr`) — cookie-based sessions |
+| Shopify | Admin API 2026-01, client credentials grant |
+| Hosting | Vercel (auto-deploy from `main`) |
+
+## Pages
+
+- **Dashboard** — Store health cards (product count, SEO coverage, vendor issues, collections, blog count)
+- **Products** — Product table with SEO generation modals
+- **Blog** — AI blog post generator + publish to Shopify
+- **Policies** — Pre-written store policies (copy or push to Shopify)
+- **Settings** — Shopify connection status + active scopes
+- **Chat** — AI chatbot with 14 tools, streaming, vision, voice input, file attachments
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # fill in env vars
+npm run dev                   # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Required Environment Variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+SHOPIFY_STORE_URL=next-chapter-homeschool.myshopify.com
+SHOPIFY_API_VERSION=2026-01
+SHOPIFY_CLIENT_ID=...
+SHOPIFY_CLIENT_SECRET=...
+ANTHROPIC_API_KEY=...
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+NCHO_SUPABASE_ANON_KEY=...
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Documentation
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [DOCUMENTATION.md](DOCUMENTATION.md) for the complete technical reference — architecture, file-by-file breakdown, API routes, tool specs, and deployment details.
