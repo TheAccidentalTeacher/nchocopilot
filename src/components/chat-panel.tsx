@@ -65,6 +65,7 @@ export default function ChatPanel() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Load threads on mount
   useEffect(() => {
@@ -303,6 +304,9 @@ export default function ChatPanel() {
     setActiveThread(optimisticThread);
 
     try {
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -316,6 +320,7 @@ export default function ChatPanel() {
             data: a.data,
           })),
         }),
+        signal: controller.signal,
       });
 
       if (!resp.ok) {
@@ -414,13 +419,22 @@ export default function ChatPanel() {
         }
       }
     } catch (err) {
-      setStreamText(
-        `❌ ${err instanceof Error ? err.message : "Connection failed"}`
-      );
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setStreamText((prev) => prev + "\n\n⛔ Stopped by user.");
+      } else {
+        setStreamText(
+          `❌ ${err instanceof Error ? err.message : "Connection failed"}`
+        );
+      }
     } finally {
+      abortControllerRef.current = null;
       setStreaming(false);
     }
   }, [input, streaming, activeThread, attachments]);
+
+  const stopStreaming = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
 
   // Process queued message after streaming ends
   useEffect(() => {
@@ -751,6 +765,14 @@ export default function ChatPanel() {
             </span>
             {queuedMessage && (
               <span className="text-xs text-sky-500 ml-auto">Your next message is queued ✓</span>
+            )}
+            {!queuedMessage && (
+              <button
+                onClick={stopStreaming}
+                className="ml-auto px-3 py-1 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                ■ Stop
+              </button>
             )}
           </div>
         )}

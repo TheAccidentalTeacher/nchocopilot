@@ -121,6 +121,12 @@ export async function POST(request: Request) {
           let maxIterations = 10;
 
           while (maxIterations-- > 0) {
+            // Check if client disconnected (Stop button)
+            if (request.signal.aborted) {
+              send("text", { content: "\n\n⛔ Stopped." });
+              break;
+            }
+
             const response = await anthropic.messages.create({
               model: "claude-sonnet-4-6",
               max_tokens: 4096,
@@ -176,7 +182,7 @@ export async function POST(request: Request) {
             }
 
             // If no tool use, we're done
-            if (!hasToolUse) {
+            if (!hasToolUse || request.signal.aborted) {
               break;
             }
 

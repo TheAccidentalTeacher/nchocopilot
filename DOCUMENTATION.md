@@ -113,7 +113,7 @@ The v1 (dashboard, products, blog, policies, settings) provides structured page-
 │  /api/sync ───────────── invalidate + re-fetch ─┘           │
 │                                                             │
 │  /api/chat ──── Claude tool_use loop (up to 10 iterations)  │
-│       │            │ Uses 14 tools that call Shopify/Supabase│
+│       │            │ Uses 15 tools that call Shopify/Supabase│
 │       │            ▼                                         │
 │  /api/extract-learnings ── auto-save facts from conversations│
 │  /api/threads ──── CRUD on chat threads (per-user isolated)  │
@@ -327,7 +327,7 @@ Lazy-initialized Supabase client with all database operations.
 - `getCostSummary()` — Returns `{today, thisMonth, allTime}` cost totals
 
 #### `chat-tools.ts` — Chatbot Tool Definitions & Executors
-The 14 tools the AI chatbot can call, each with a definition (JSON Schema for Claude) and a server-side executor.
+The 15 tools the AI chatbot can call, each with a definition (JSON Schema for Claude) and a server-side executor.
 
 **Product Cache:**
 - In-memory `ShopifyProduct[]` cache with 5-minute TTL
@@ -352,12 +352,13 @@ The 14 tools the AI chatbot can call, each with a definition (JSON Schema for Cl
 | 12 | `update_metafields` | Writes metafield values to a Shopify product. Known custom metafields (namespace: `custom`): `collapsible_headline_1`, `collapsible_headline_2_author_brand`, `collapsible_text_1`, `collapsible_text_2`. All `single_line_text_field` type. Can write any future metafields Anna creates. | Write |
 | 13 | `create_collection` | Creates a new Shopify collection. Smart collections use rules (TAG EQUALS, TYPE CONTAINS, VENDOR NOT_EQUALS, etc.) to auto-include matching products. Manual collections have no rules. Supports sort orders. Logs creation to change log. | Write |
 | 14 | `create_metafield_definition` | Creates a store-level metafield definition so it appears as a named, editable field in Shopify Admin. Must be created BEFORE writing values to a new metafield key. Automatically pinned. Handles duplicates gracefully (TAKEN error). | Write |
+| 15 | `undo_changes` | Undoes recent changes to Shopify products. Reverses tag additions/removals, SEO updates, description/title/vendor changes by restoring old values from the change log. Can target a specific product or undo the N most recent changes. Each undo is logged as its own change log entry for traceability. | Write |
 
 #### `store-context.ts` — System Prompt Builder
 `buildLiveContext()` — Assembles the system prompt for every chatbot message. Fetches live data from Supabase in parallel:
 
 1. **Identity** — "You are Anna's AI store assistant for NCHO"
-2. **Self-awareness** — Full description of the app's architecture, tech stack, every page, and all 14 tools
+2. **Self-awareness** — Full description of the app's architecture, tech stack, every page, and all 15 tools
 3. **Brand rules** — All non-negotiable NCHO voice rules (your child, convicted not curious, warm teacher voice)
 4. **Tag taxonomy** — Complete reference for Grade:, Age:, Book:, Genre:, Subject: prefix system with valid values
 5. **Store memory** — All previously learned facts and preferences, formatted as bullets
@@ -589,7 +590,7 @@ Shopify connection diagnostics.
 
 | Method | Route | Purpose | Auth | Cache |
 |---|---|---|---|---|
-| POST | `/api/chat` | Streaming SSE chat with Claude tool_use loop (14 tools) | Anthropic + Shopify + Supabase | Product cache 5-min |
+| POST | `/api/chat` | Streaming SSE chat with Claude tool_use loop (15 tools) | Anthropic + Shopify + Supabase | Product cache 5-min |
 | POST | `/api/extract-learnings` | Auto-extract facts from conversation | Anthropic + Supabase | None |
 | GET | `/api/threads` | List all chat threads (per-user filtered) | Supabase Auth | None |
 | POST | `/api/threads` | Create new thread (with user_id) | Supabase Auth | None |
@@ -678,6 +679,12 @@ Available on every page via floating 💬 button (bottom-right). Opens as a 480p
 - "Create a collection for all Grade:3rd products" → calls `create_collection`
 - "Create a metafield definition for Product Information" → calls `create_metafield_definition`
 - "Set the collapsible text for this product" → calls `update_metafields`
+
+**Undo operations:**
+- "Undo that" → calls `undo_changes` (undoes most recent change)
+- "Undo the last 5 changes" → calls `undo_changes` with count=5
+- "Undo everything you did to that puzzle" → calls `undo_changes` with productId
+- "Those tags are wrong, put them back" → calls `undo_changes`
 
 **Memory operations:**
 - "Remember that Book:Classics maps to Grade:9th-12th" → calls `remember`
@@ -868,7 +875,7 @@ These rules are enforced in three locations:
 ### v2 Features (Complete & Deployed)
 - [x] Supabase integration (5 tables created, lazy client, all CRUD)
 - [x] AI chatbot with streaming SSE
-- [x] 14 chatbot tools (stats, fetch, collections, tag, update, changelog, remember, SEO, classify, search_web, publish_blog, update_metafields, create_collection, create_metafield_definition)
+- [x] 15 chatbot tools (stats, fetch, collections, tag, update, changelog, remember, SEO, classify, search_web, publish_blog, update_metafields, create_collection, create_metafield_definition, undo_changes)
 - [x] Agentic tool loop (up to 10 iterations per message)
 - [x] Thread management (create, list, rename via double-click/pencil, delete)
 - [x] Auto-thread titling from first message
@@ -889,12 +896,14 @@ These rules are enforced in three locations:
 - [x] Product title field in update_product tool
 - [x] Collection creation tool (smart + manual with rules)
 - [x] Metafield definition creation tool (store-level field setup)
+- [x] Undo tool — reverses recent tag/SEO/description/title/vendor changes using change log old values
 
 ### UX Features (Complete & Deployed)
 - [x] Thinking indicator — animated bouncing dots + context-aware status text
 - [x] Message queue system — type and send while streaming, auto-sends when done
 - [x] Voice input — Web Speech API microphone, live transcript in input field
 - [x] Unlocked input during streaming — attach, send/queue, and mic buttons always available
+- [x] Stop button — red "■ Stop" button during streaming that aborts the tool loop mid-operation (AbortController + server-side signal check)
 
 ### Authentication (Complete & Deployed)
 - [x] Supabase Auth with `@supabase/ssr` — cookie-based server sessions

@@ -26,7 +26,7 @@ An internal tool built for Anna (and Scott) to manage the NCHO Shopify store thr
 - **Blog** — AI blog post generator + publish to Shopify
 - **Policies** — Pre-written store policies (copy or push to Shopify)
 - **Settings** — Shopify connection status + active scopes
-- **Chat** — AI chatbot with 14 tools, streaming, vision, voice input, file attachments
+- **Chat** — AI chatbot with 15 tools, streaming, vision, voice input, file attachments, stop button, undo
 
 ## Setup
 

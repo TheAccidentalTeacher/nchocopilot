@@ -417,6 +417,25 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
       required: ["name", "namespace", "key", "type"],
     },
   },
+  {
+    name: "undo_changes",
+    description:
+      "Undo recent changes made to Shopify products. Reverses tag additions/removals, SEO updates, description changes, vendor/type changes — anything logged in the change log. Can undo a specific number of recent changes or all changes to a specific product. Always confirm with the user before undoing.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        productId: {
+          type: "string",
+          description: "If provided, only undo changes for this specific product (Shopify GID). Otherwise undoes the most recent changes across all products.",
+        },
+        count: {
+          type: "number",
+          description: "Number of recent changes to undo (default: 1). Changes are undone newest-first.",
+        },
+      },
+      required: [],
+    },
+  },
 ];
 
 // ── Tool Executors ──
@@ -475,6 +494,8 @@ export async function executeTool(
       return executeCreateCollection(input);
     case "create_metafield_definition":
       return executeCreateMetafieldDefinition(input);
+    case "undo_changes":
+      return executeUndoChanges(input);
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` });
   }
@@ -1338,5 +1359,159 @@ async function executeCreateMetafieldDefinition(input: ToolInput): Promise<strin
       type: def.type.name,
       ownerType,
     },
+  });
+}
+
+// ── Undo Changes ──
+
+async function executeUndoChanges(input: ToolInput): Promise<string> {
+  const targetProductId = input.productId as string | undefined;
+  const count = Math.min(Math.max((input.count as number) || 1, 1), 20);
+
+  // Fetch recent changes (more than needed, then filter)
+  const allChanges = await getRecentChanges(50);
+
+  // Filter by product if specified, exclude non-reversible actions
+  const REVERSIBLE_FIELDS = new Set(["tags", "seo_title", "seo_description", "description", "title", "vendor", "productType", "category"]);
+  const REVERSIBLE_ACTIONS = new Set(["add_tag", "remove_tag", "set_seo_title", "set_seo_description", "set_description", "set_title", "set_vendor", "set_productType", "set_category", "update_seo", "update_description", "update_title", "update_vendor", "update_productType"]);
+
+  const candidates = allChanges.filter((c) => {
+    if (targetProductId && c.product_id !== targetProductId) return false;
+    if (c.action === "create_metafield_definition" || c.action === "create_collection" || c.action === "publish_blog" || c.action === "undo") return false;
+    if (!c.old_value && !REVERSIBLE_FIELDS.has(c.field)) return false;
+    return true;
+  });
+
+  if (candidates.length === 0) {
+    return JSON.stringify({
+      success: false,
+      message: targetProductId
+        ? "No reversible changes found for that product."
+        : "No reversible changes found in the recent change log.",
+    });
+  }
+
+  const toUndo = candidates.slice(0, count);
+  const results: Array<{ product: string; field: string; result: string }> = [];
+
+  // Group changes by product to batch
+  for (const change of toUndo) {
+    try {
+      if (change.field === "tags" && change.old_value != null) {
+        // Restore old tags entirely
+        const oldTags = change.old_value.split(", ").filter(Boolean);
+        await gql<{
+          productUpdate: {
+            product: { id: string } | null;
+            userErrors: Array<{ message: string }>;
+          };
+        }>(
+          `mutation productUpdate($input: ProductInput!) {
+            productUpdate(input: $input) {
+              product { id }
+              userErrors { field message }
+            }
+          }`,
+          { input: { id: change.product_id, tags: oldTags } }
+        );
+
+        await logChange({
+          product_id: change.product_id,
+          product_title: change.product_title,
+          field: "tags",
+          old_value: change.new_value,
+          new_value: change.old_value,
+          action: "undo",
+          source: "chatbot",
+          confidence: null,
+        });
+
+        invalidateProductCache();
+        results.push({ product: change.product_title || change.product_id, field: "tags", result: "restored" });
+      } else if (change.field === "seo_title" || change.field === "seo_description") {
+        // Restore SEO field
+        const seoField = change.field === "seo_title" ? "title" : "description";
+        await gql<{
+          productUpdate: {
+            product: { id: string } | null;
+            userErrors: Array<{ message: string }>;
+          };
+        }>(
+          `mutation productUpdate($input: ProductInput!) {
+            productUpdate(input: $input) {
+              product { id }
+              userErrors { field message }
+            }
+          }`,
+          { input: { id: change.product_id, seo: { [seoField]: change.old_value || "" } } }
+        );
+
+        await logChange({
+          product_id: change.product_id,
+          product_title: change.product_title,
+          field: change.field,
+          old_value: change.new_value,
+          new_value: change.old_value,
+          action: "undo",
+          source: "chatbot",
+          confidence: null,
+        });
+
+        invalidateProductCache();
+        results.push({ product: change.product_title || change.product_id, field: change.field, result: "restored" });
+      } else if (["description", "title", "vendor", "productType"].includes(change.field)) {
+        // Restore a simple field
+        const fieldMap: Record<string, string> = {
+          description: "descriptionHtml",
+          title: "title",
+          vendor: "vendor",
+          productType: "productType",
+        };
+        const shopifyField = fieldMap[change.field] || change.field;
+
+        await gql<{
+          productUpdate: {
+            product: { id: string } | null;
+            userErrors: Array<{ message: string }>;
+          };
+        }>(
+          `mutation productUpdate($input: ProductInput!) {
+            productUpdate(input: $input) {
+              product { id }
+              userErrors { field message }
+            }
+          }`,
+          { input: { id: change.product_id, [shopifyField]: change.old_value || "" } }
+        );
+
+        await logChange({
+          product_id: change.product_id,
+          product_title: change.product_title,
+          field: change.field,
+          old_value: change.new_value,
+          new_value: change.old_value,
+          action: "undo",
+          source: "chatbot",
+          confidence: null,
+        });
+
+        invalidateProductCache();
+        results.push({ product: change.product_title || change.product_id, field: change.field, result: "restored" });
+      } else {
+        results.push({ product: change.product_title || change.product_id, field: change.field, result: "skipped — not reversible" });
+      }
+    } catch (err) {
+      results.push({
+        product: change.product_title || change.product_id,
+        field: change.field,
+        result: `failed: ${err instanceof Error ? err.message : "unknown error"}`,
+      });
+    }
+  }
+
+  return JSON.stringify({
+    success: true,
+    undone: results.length,
+    details: results,
   });
 }
