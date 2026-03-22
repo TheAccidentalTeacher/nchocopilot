@@ -7,6 +7,28 @@ import { gql } from "./shopify";
 import { logChange, getRecentChanges, addStoreMemory } from "./supabase";
 import type { ShopifyProduct } from "./types";
 
+// Rich tool result type — supports returning images alongside text for Claude vision
+export type RichToolResult = {
+  type: "rich";
+  content: Array<
+    | { type: "text"; text: string }
+    | {
+        type: "image";
+        source: {
+          type: "base64";
+          media_type:
+            | "image/jpeg"
+            | "image/png"
+            | "image/gif"
+            | "image/webp";
+          data: string;
+        };
+      }
+  >;
+  summary: string;
+};
+export type ToolExecutionResult = string | RichToolResult;
+
 // ── Tool Definitions (sent to Claude) ──
 
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
@@ -436,6 +458,21 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
       required: [],
     },
   },
+  {
+    name: "generate_description",
+    description:
+      "Generate an accurate product description by analyzing the product's actual Shopify images using AI vision. Downloads the product image so you can SEE the puzzle artwork, game box, kit contents — instead of guessing from the title. Returns the image + product data for you to write a description following Product Description Rules, then call update_product to save it.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        productId: {
+          type: "string",
+          description: "Shopify product GID",
+        },
+      },
+      required: ["productId"],
+    },
+  },
 ];
 
 // ── Tool Executors ──
@@ -464,7 +501,7 @@ export function invalidateProductCache(): void {
 export async function executeTool(
   toolName: string,
   input: ToolInput
-): Promise<string> {
+): Promise<ToolExecutionResult> {
   switch (toolName) {
     case "get_store_stats":
       return executeGetStoreStats();
@@ -496,6 +533,8 @@ export async function executeTool(
       return executeCreateMetafieldDefinition(input);
     case "undo_changes":
       return executeUndoChanges(input);
+    case "generate_description":
+      return executeGenerateDescription(input);
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` });
   }
@@ -1514,4 +1553,95 @@ async function executeUndoChanges(input: ToolInput): Promise<string> {
     undone: results.length,
     details: results,
   });
+}
+
+// ── Generate Description (with Vision) ──
+
+async function executeGenerateDescription(
+  input: ToolInput
+): Promise<ToolExecutionResult> {
+  const products = await getCachedProducts();
+  const product = products.find((p) => p.id === input.productId);
+  if (!product) {
+    return JSON.stringify({ error: `Product not found: ${input.productId}` });
+  }
+
+  const images = product.images?.edges?.map((e) => e.node) || [];
+
+  const metadata = {
+    id: product.id,
+    title: product.title,
+    vendor: product.vendor,
+    productType: product.productType,
+    tags: product.tags,
+    price: product.priceRangeV2?.minVariantPrice?.amount,
+    existingDescription:
+      product.descriptionHtml?.replace(/<[^>]*>/g, "").slice(0, 500) || null,
+    imageCount: images.length,
+  };
+
+  if (images.length === 0) {
+    return JSON.stringify({
+      ...metadata,
+      instruction:
+        "⚠️ NO PRODUCT IMAGES FOUND. Write a description from title/metadata only, but prepend [NEEDS REVIEW: no product image available — description based on title only]. Then call update_product with descriptionHtml to save it.",
+    });
+  }
+
+  // Download the first image for vision analysis (resize to 1024px for efficiency)
+  const rawUrl = images[0].url;
+  const imageUrl = rawUrl.includes("?")
+    ? `${rawUrl}&width=1024`
+    : `${rawUrl}?width=1024`;
+
+  try {
+    const response = await fetch(imageUrl, {
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const buffer = await response.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString("base64");
+
+    // Map Content-Type to Anthropic-allowed media types
+    const ct = response.headers.get("content-type") || "image/jpeg";
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+    ] as const;
+    const mediaType = allowedTypes.find((t) => ct.includes(t)) || "image/jpeg";
+
+    const textPayload = JSON.stringify({
+      ...metadata,
+      imageAltText: images[0].altText || null,
+      instruction:
+        "LOOK AT THE ATTACHED IMAGE. Write an accurate HTML product description based on what you ACTUALLY SEE in this image. Follow the Product Description Rules in your system prompt. Then call update_product with the descriptionHtml to save it to Shopify.",
+    });
+
+    return {
+      type: "rich",
+      content: [
+        {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: mediaType,
+            data: base64,
+          },
+        },
+        {
+          type: "text",
+          text: textPayload,
+        },
+      ],
+      summary: textPayload,
+    };
+  } catch (err) {
+    return JSON.stringify({
+      ...metadata,
+      instruction: `⚠️ COULD NOT DOWNLOAD PRODUCT IMAGE (${err instanceof Error ? err.message : "unknown error"}). Write a description from title/metadata only, but prepend [NEEDS REVIEW: image download failed — description based on title only]. Then call update_product with descriptionHtml to save it.`,
+    });
+  }
 }

@@ -151,33 +151,43 @@ export async function POST(request: Request) {
                 send("tool_start", { tool: block.name, input: block.input });
 
                 // Execute the tool
-                const result = await executeTool(
+                const rawResult = await executeTool(
                   block.name,
                   block.input as Record<string, unknown>
                 );
 
+                // Rich results (generate_description) include images for Claude vision
+                const textResult =
+                  typeof rawResult === "string"
+                    ? rawResult
+                    : rawResult.summary;
+                const claudeContent =
+                  typeof rawResult === "string"
+                    ? rawResult
+                    : rawResult.content;
+
                 toolCalls.push({
                   tool: block.name,
                   input: block.input as Record<string, unknown>,
-                  result: result.slice(0, 500),
+                  result: textResult.slice(0, 500),
                 });
 
                 send("tool_result", {
                   tool: block.name,
-                  result: JSON.parse(result),
+                  result: JSON.parse(textResult),
                 });
 
-                // Add tool result for next iteration
+                // Add tool result for next iteration (may include images for vision)
                 toolResults.push({
                   role: "user" as const,
                   content: [
                     {
                       type: "tool_result" as const,
                       tool_use_id: block.id,
-                      content: result,
+                      content: claudeContent,
                     },
                   ],
-                });
+                } as Anthropic.MessageParam);
               }
             }
 
