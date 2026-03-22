@@ -385,11 +385,11 @@ Client component that wraps all page content.
 #### `sidebar.tsx` — Navigation Sidebar
 Client component for the left nav sidebar.
 
-- 5 nav links with emoji icons: 📊 Dashboard, 📦 Products, 📝 Blog, 📋 Policies, ⚙️ Settings
+- 6 nav links with emoji icons: 📊 Dashboard, 📦 Products, 🔄 Change Log, 📝 Blog, 📋 Policies, ⚙️ Settings
 - Active page highlighting (pink background)
 - Displays logged-in user's first name (parsed from email: "scott" or "anna")
 - Logout button → POST `/api/auth/logout` → redirect to `/login`
-- Pink + white gradient, "Private tool — Scott & Anna only" footer
+- Pink + white gradient background
 
 #### `chat-panel.tsx` — Full Chat Interface
 ~1,100 lines. The complete conversational UI rendered inside the layout shell's right panel.
@@ -493,7 +493,7 @@ Email + password authentication form.
 #### `layout.tsx` — Root Layout
 - Google Fonts: Geist Sans + Geist Mono
 - Background: `bg-gradient-to-br from-pink-50 via-sky-50/40 to-emerald-50/30`
-- Left sidebar (224px): NCHO Tools branding, 5 nav links (Dashboard, Products, Blog, Policies, Settings), footer "Private tool — Scott & Anna only"
+- Left sidebar (224px): NCHO Tools branding, 6 nav links (Dashboard, Products, Change Log, Blog, Policies, Settings), user name + sign out button
 - Main area wrapped in `<LayoutShell>` which adds the chat panel toggle
 
 #### `globals.css` — Global Styles
@@ -553,6 +553,20 @@ View and stage store policies.
 - Expandable policy content with full HTML preview
 - "Push to Shopify" button (write_content scope enabled)
 - "Copy" button for manual paste into Shopify admin
+
+#### `changes/page.tsx` — Change Log
+Visual timeline of every AI-initiated change to the Shopify store with per-entry undo.
+
+**Features:**
+- Entries grouped by day with sticky date headers
+- Color-coded action badges (green=tag add, blue=SEO, purple=description, gray=undo)
+- Expandable rows showing before/after diff (red=old, green=new)
+- "↩ Undo" button on every reversible entry — triggers freshness check against live Shopify value
+- Conflict detection modal when field has drifted since original change — shows current vs. restore value, "Cancel" or "Override & Undo"
+- Filters: search by product name, filter by field type, filter by action type
+- Pagination (50 per page)
+- Toast notifications for undo success/failure
+- Non-reversible items (collection creation, blog publish, metafield definitions) shown without undo buttons
 
 #### `settings/page.tsx` — Connection Settings
 Shopify connection diagnostics.
@@ -650,7 +664,7 @@ Available on every page via floating 💬 button (bottom-right). Opens as a 480p
 2. **System prompt is assembled** via `buildLiveContext()` — injects identity, self-awareness, brand rules, store memory, recent changes, tag taxonomy, cost tracking, and 14 behavioral rules
 3. **Last 20 messages** from the thread are included as conversation history
 4. **Attachments processed** — images converted to base64 for Claude vision, files converted to text content
-5. **Claude processes** with `tool_use` enabled, seeing 14 available tools
+5. **Claude processes** with `tool_use` enabled, seeing 15 available tools
 6. If Claude wants to use a tool:
    - SSE sends `tool_start` event → UI shows ⏳ indicator + "Working on it — using {tool}..."
    - Server executes the tool (reads/writes Shopify/Supabase)
@@ -951,7 +965,7 @@ These rules are enforced in three locations:
 | 4 | **Bulk operations UI** | A dedicated page or chat command for "classify all untagged products" or "generate SEO for all products without it" — with progress tracking. |
 | 5 | **Thread pinning in UI** | The `pinned` column exists but the chat UI doesn't expose it. Add a pin toggle that keeps important threads at the top. |
 | 6 | **Memory management UI** | A page to view, edit, and delete stored memories. Currently memories can only be viewed in Supabase directly. |
-| 7 | **Change log viewer page** | A dedicated page showing all changes in a table with filters (by product, by action type, by date). Currently only accessible via chatbot. |
+| ~~7~~ | ~~**Change log viewer page**~~ | ~~DONE — shipped as `/changes` page with per-entry undo, freshness checks, conflict detection, filters, pagination.~~ |
 | 8 | **Export change log** | CSV export of all changes for Anna's records. |
 | 9 | **Custom domain** | Move from `nchocopilot.vercel.app` to a subdomain like `tools.nextchapterhomeschool.com`. |
 | 10 | **Product description generator** | The chatbot can update descriptions, but a dedicated UI for bulk description generation (similar to the SEO modal) would be useful. |
@@ -1074,5 +1088,8 @@ Check Supabase connection. The chat gracefully degrades — if Supabase is unrea
 | `06dc73c` | feat: add create_collection tool (smart + manual collections) |
 | `6da0058` | feat: thinking indicator, unlocked input during streaming, voice input mic button |
 | `b850c47` | feat: add create_metafield_definition tool (store-level metafield setup) |
+| `0fc2f99` | docs: comprehensive documentation update — fix tool count (10→14), add publish_blog, fix stale scope refs, rewrite README |
+| `e8f2e5b` | feat: stop button + undo_changes tool — interrupt mid-operation, reverse wrong changes |
+| `950204d` | feat: Change Log page — visual timeline with per-entry undo, freshness checks, conflict detection |
 
-**Total codebase:** ~3,500+ lines of application code across 30+ source files.
+**Total codebase:** ~6,200+ lines of application code across 39 source files.
