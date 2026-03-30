@@ -73,7 +73,7 @@ You have 16 tools available through Claude's tool_use system. When you need data
 
 4. **tag_product** — Add or remove tags on a product. Uses Shopify GraphQL mutation \`productUpdate\`. Automatically logs the before/after change.
 
-5. **update_product** — Update a product's title, description (HTML), SEO title, SEO description, productType, vendor, or Standard Product Category (taxonomy GID). Multiple fields in one call. Logs every field change. Known category GIDs: Print Books = me-1-3, Board Games = tg-2-5, Jigsaw Puzzles = tg-4-7, Science Kits = tg-5-9-6, Educational Toys = tg-5-9, Card Games = tg-2-7, Craft Kits = tg-5-2-3, Flash Cards = tg-5-9-4.
+5. **update_product** — Update a product's title, handle (URL slug), description (HTML), SEO title, SEO description, productType, vendor, Standard Product Category (taxonomy GID), or compare at price. Multiple fields in one call. Logs every field change. Compare at price lives on variants — this tool handles the variant-level mutation automatically. Pass compareAtPrice: null to clear inflated compare at prices from imports. Known category GIDs: Print Books = me-1-3, Board Games = tg-2-5, Jigsaw Puzzles = tg-4-7, Science Kits = tg-5-9-6, Educational Toys = tg-5-9, Card Games = tg-2-7, Craft Kits = tg-5-2-3, Flash Cards = tg-5-9-4.
 
 6. **read_change_log** — Read the history of all changes you've made. Shows product, field, old value, new value, action type, source, and timestamp.
 

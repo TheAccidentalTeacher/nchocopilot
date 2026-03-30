@@ -342,7 +342,7 @@ The 16 tools the AI chatbot can call, each with a definition (JSON Schema for Cl
 | 2 | `fetch_products` | Fetches products with 10+ filter modes: `all`, `no-seo`, `no-tags`, `vendor-issues`, `no-description`, `no-category`, `no-metafields`, `by-tag`, `by-vendor`, `by-type`, `search`. Supports `value` parameter and `limit` (default 20). Returns lightweight product summaries. | Read |
 | 3 | `fetch_collections` | Lists all collections with product counts and SEO status | Read |
 | 4 | `tag_product` | Adds or removes tags on a product via GraphQL `productUpdate` mutation. Logs changes to `ncho_change_log`. Invalidates product cache. | Write |
-| 5 | `update_product` | Updates title, description, SEO title, SEO description, productType, vendor, or Standard Product Category (taxonomy GID). Can update multiple fields at once. Logs each changed field individually. Invalidates cache. | Write |
+| 5 | `update_product` | Updates title, handle (URL slug), description, SEO title, SEO description, productType, vendor, Standard Product Category (taxonomy GID), or compare at price. Compare at price lives on variants — handled via `productVariantsBulkUpdate` mutation automatically. Pass `compareAtPrice: null` to clear inflated prices from imports. Can update multiple fields at once. Logs each changed field individually. Invalidates cache. | Write |
 | 6 | `read_change_log` | Reads the audit trail of recent changes | Read |
 | 7 | `remember` | Manually saves a fact to `ncho_store_memory` with a category (preference, product, brand, taxonomy, general) | Write (DB only) |
 | 8 | `generate_seo` | Returns full product data so the chatbot can craft SEO text using its own reasoning + brand rules, then call `update_product` to save | Read (prep) |
@@ -840,7 +840,8 @@ All **24 read-only scopes** plus the following **write scopes** are granted:
 | `write_publications` | Publishing products to sales channels |
 
 ### GraphQL Mutations Used
-1. **`productUpdate`** — Updates product fields (title, description, SEO, tags, vendor, productType, category). Used by `update-product-seo` API route and `tag_product`/`update_product` chat tools.
+1. **`productUpdate`** — Updates product fields (title, handle, description, SEO, tags, vendor, productType, category). Used by `update-product-seo` API route and `tag_product`/`update_product` chat tools.
+2. **`productVariantsBulkUpdate`** — Updates variant-level fields (compareAtPrice). Used by `update_product` chat tool when clearing or setting compare at price.
 2. **`collectionCreate`** — Creates smart or manual collections. Used by `create_collection` chat tool.
 3. **`metafieldDefinitionCreate`** — Creates store-level metafield definitions. Used by `create_metafield_definition` chat tool.
 4. **`articleCreate`** — Publishes blog articles. Used by `publish_blog` chat tool.

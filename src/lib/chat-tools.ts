@@ -103,7 +103,7 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
     name: "update_product",
     description:
-      "Update a product's title, description, SEO title, SEO description, productType, or vendor. Can update one or multiple fields at once.",
+      "Update a product's title, handle (URL slug), description, SEO title, SEO description, productType, vendor, or compare at price. Can update one or multiple fields at once. Use compareAtPrice: null to clear inflated compare at prices from imports.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -114,6 +114,10 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
         title: {
           type: "string",
           description: "New product title",
+        },
+        handle: {
+          type: "string",
+          description: "URL handle (slug) for the product. Lowercase, hyphens only. e.g. 'big-fat-notebook-chemistry-high-school'",
         },
         descriptionHtml: {
           type: "string",
@@ -138,6 +142,10 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
         category: {
           type: "string",
           description: "Shopify Standard Product Category GID. Known GIDs: Print Books = gid://shopify/TaxonomyCategory/me-1-3, Board Games = gid://shopify/TaxonomyCategory/tg-2-5, Jigsaw Puzzles = gid://shopify/TaxonomyCategory/tg-4-7, Science Kits = gid://shopify/TaxonomyCategory/tg-5-9-6, Educational Toys = gid://shopify/TaxonomyCategory/tg-5-9, Card Games = gid://shopify/TaxonomyCategory/tg-2-7, Craft Kits = gid://shopify/TaxonomyCategory/tg-5-2-3, Flash Cards = gid://shopify/TaxonomyCategory/tg-5-9-4",
+        },
+        compareAtPrice: {
+          type: ["string", "null"],
+          description: "Compare at price for ALL variants. Pass null to clear it, or a string like '29.99' to set it. Lives on variants, not the product — this tool handles the variant-level mutation automatically.",
         },
       },
       required: ["productId"],
@@ -766,6 +774,7 @@ async function executeUpdateProduct(input: ToolInput): Promise<string> {
   const mutationInput: Record<string, unknown> = { id: productId };
 
   if (input.title) mutationInput.title = input.title;
+  if (input.handle) mutationInput.handle = input.handle;
   if (input.descriptionHtml) mutationInput.descriptionHtml = input.descriptionHtml;
   if (input.productType) mutationInput.productType = input.productType;
   if (input.vendor) mutationInput.vendor = input.vendor;
@@ -777,26 +786,70 @@ async function executeUpdateProduct(input: ToolInput): Promise<string> {
     };
   }
 
-  const data = await gql<{
-    productUpdate: {
-      product: { id: string; title: string } | null;
-      userErrors: Array<{ field: string[]; message: string }>;
-    };
-  }>(
-    `mutation productUpdate($input: ProductInput!) {
-      productUpdate(input: $input) {
-        product { id title }
-        userErrors { field message }
-      }
-    }`,
-    { input: mutationInput }
-  );
+  // Only run product-level mutation if there are product-level fields to update
+  const hasProductFields = Object.keys(mutationInput).length > 1; // more than just id
+  if (hasProductFields) {
+    const data = await gql<{
+      productUpdate: {
+        product: { id: string; title: string } | null;
+        userErrors: Array<{ field: string[]; message: string }>;
+      };
+    }>(
+      `mutation productUpdate($input: ProductInput!) {
+        productUpdate(input: $input) {
+          product { id title }
+          userErrors { field message }
+        }
+      }`,
+      { input: mutationInput }
+    );
 
-  if (!data.productUpdate) {
-    return JSON.stringify({ error: "Shopify rejected the update — check that write_products scope is enabled" });
+    if (!data.productUpdate) {
+      return JSON.stringify({ error: "Shopify rejected the update — check that write_products scope is enabled" });
+    }
+    if (data.productUpdate.userErrors.length > 0) {
+      return JSON.stringify({ error: data.productUpdate.userErrors[0].message });
+    }
   }
-  if (data.productUpdate.userErrors.length > 0) {
-    return JSON.stringify({ error: data.productUpdate.userErrors[0].message });
+
+  // Handle compareAtPrice — lives on variants, not the product
+  const hasCompareAtPrice = "compareAtPrice" in input;
+  if (hasCompareAtPrice) {
+    const variantEdges = product.variants?.edges || [];
+    if (variantEdges.length === 0) {
+      return JSON.stringify({ error: "Product has no variants — cannot update compareAtPrice" });
+    }
+
+    const newCompareAtPrice = input.compareAtPrice === null || input.compareAtPrice === "null"
+      ? null
+      : String(input.compareAtPrice);
+
+    const variantInputs = variantEdges.map((edge) => ({
+      id: edge.node.id,
+      compareAtPrice: newCompareAtPrice,
+    }));
+
+    const variantData = await gql<{
+      productVariantsBulkUpdate: {
+        productVariants: Array<{ id: string; compareAtPrice: string | null }> | null;
+        userErrors: Array<{ field: string[]; message: string }>;
+      };
+    }>(
+      `mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+        productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+          productVariants { id compareAtPrice }
+          userErrors { field message }
+        }
+      }`,
+      { productId, variants: variantInputs }
+    );
+
+    if (!variantData.productVariantsBulkUpdate) {
+      return JSON.stringify({ error: "Shopify rejected the variant update — check write_products scope" });
+    }
+    if (variantData.productVariantsBulkUpdate.userErrors.length > 0) {
+      return JSON.stringify({ error: variantData.productVariantsBulkUpdate.userErrors[0].message });
+    }
   }
 
   // Log each changed field
@@ -888,6 +941,38 @@ async function executeUpdateProduct(input: ToolInput): Promise<string> {
       old_value: product.category?.fullName || null,
       new_value: input.category as string,
       action: "set_category",
+      source: "chatbot",
+      confidence: null,
+    });
+  }
+  if (input.handle) {
+    fieldsChanged.push("handle");
+    await logChange({
+      product_id: productId,
+      product_title: product.title,
+      field: "handle",
+      old_value: product.handle || null,
+      new_value: input.handle as string,
+      action: "update_handle",
+      source: "chatbot",
+      confidence: null,
+    });
+  }
+  if (hasCompareAtPrice) {
+    fieldsChanged.push("compareAtPrice");
+    // Grab the old compare at price from first variant
+    const firstVariant = product.variants?.edges?.[0]?.node;
+    const oldCompareAt = firstVariant?.compareAtPrice || null;
+    const newCompareAt = input.compareAtPrice === null || input.compareAtPrice === "null"
+      ? null
+      : String(input.compareAtPrice);
+    await logChange({
+      product_id: productId,
+      product_title: product.title,
+      field: "compareAtPrice",
+      old_value: oldCompareAt ? `$${oldCompareAt}` : null,
+      new_value: newCompareAt ? `$${newCompareAt}` : "cleared",
+      action: "update_compare_at_price",
       source: "chatbot",
       confidence: null,
     });
@@ -1411,8 +1496,8 @@ async function executeUndoChanges(input: ToolInput): Promise<string> {
   const allChanges = await getRecentChanges(50);
 
   // Filter by product if specified, exclude non-reversible actions
-  const REVERSIBLE_FIELDS = new Set(["tags", "seo_title", "seo_description", "description", "title", "vendor", "productType", "category"]);
-  const REVERSIBLE_ACTIONS = new Set(["add_tag", "remove_tag", "set_seo_title", "set_seo_description", "set_description", "set_title", "set_vendor", "set_productType", "set_category", "update_seo", "update_description", "update_title", "update_vendor", "update_productType"]);
+  const REVERSIBLE_FIELDS = new Set(["tags", "seo_title", "seo_description", "description", "title", "vendor", "productType", "category", "handle", "compareAtPrice"]);
+  const REVERSIBLE_ACTIONS = new Set(["add_tag", "remove_tag", "set_seo_title", "set_seo_description", "set_description", "set_title", "set_vendor", "set_productType", "set_category", "update_seo", "update_description", "update_title", "update_vendor", "update_productType", "update_handle", "update_compare_at_price"]);
 
   const candidates = allChanges.filter((c) => {
     if (targetProductId && c.product_id !== targetProductId) return false;
@@ -1498,13 +1583,14 @@ async function executeUndoChanges(input: ToolInput): Promise<string> {
 
         invalidateProductCache();
         results.push({ product: change.product_title || change.product_id, field: change.field, result: "restored" });
-      } else if (["description", "title", "vendor", "productType"].includes(change.field)) {
+      } else if (["description", "title", "vendor", "productType", "handle"].includes(change.field)) {
         // Restore a simple field
         const fieldMap: Record<string, string> = {
           description: "descriptionHtml",
           title: "title",
           vendor: "vendor",
           productType: "productType",
+          handle: "handle",
         };
         const shopifyField = fieldMap[change.field] || change.field;
 
@@ -1536,6 +1622,50 @@ async function executeUndoChanges(input: ToolInput): Promise<string> {
 
         invalidateProductCache();
         results.push({ product: change.product_title || change.product_id, field: change.field, result: "restored" });
+      } else if (change.field === "compareAtPrice") {
+        // Restore compare at price on all variants — need to fetch variant IDs first
+        const products = await getCachedProducts();
+        const prod = products.find((p) => p.id === change.product_id);
+        const variantEdges = prod?.variants?.edges || [];
+        if (variantEdges.length > 0) {
+          const restoreValue = change.old_value?.startsWith("$")
+            ? change.old_value.slice(1)
+            : change.old_value === "cleared" ? null : change.old_value;
+          const variantInputs = variantEdges.map((edge) => ({
+            id: edge.node.id,
+            compareAtPrice: restoreValue,
+          }));
+          await gql<{
+            productVariantsBulkUpdate: {
+              productVariants: Array<{ id: string }> | null;
+              userErrors: Array<{ message: string }>;
+            };
+          }>(
+            `mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+              productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+                productVariants { id compareAtPrice }
+                userErrors { field message }
+              }
+            }`,
+            { productId: change.product_id, variants: variantInputs }
+          );
+
+          await logChange({
+            product_id: change.product_id,
+            product_title: change.product_title,
+            field: "compareAtPrice",
+            old_value: change.new_value,
+            new_value: change.old_value,
+            action: "undo",
+            source: "chatbot",
+            confidence: null,
+          });
+
+          invalidateProductCache();
+          results.push({ product: change.product_title || change.product_id, field: "compareAtPrice", result: "restored" });
+        } else {
+          results.push({ product: change.product_title || change.product_id, field: "compareAtPrice", result: "skipped — no variants found" });
+        }
       } else {
         results.push({ product: change.product_title || change.product_id, field: change.field, result: "skipped — not reversible" });
       }

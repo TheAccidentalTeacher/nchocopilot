@@ -8,18 +8,20 @@ import { invalidateProductCache } from "@/lib/chat-tools";
 
 const REVERSIBLE_FIELDS = new Set([
   "tags", "seo_title", "seo_description", "description",
-  "title", "vendor", "productType",
+  "title", "vendor", "productType", "handle", "compareAtPrice",
 ]);
 
 interface ProductQueryResult {
   product: {
     id: string;
     title: string;
+    handle: string;
     tags: string[];
     vendor: string;
     productType: string;
     descriptionHtml: string;
     seo: { title: string; description: string };
+    variants: { edges: Array<{ node: { id: string; compareAtPrice: string | null } }> };
   } | null;
 }
 
@@ -27,8 +29,9 @@ async function fetchCurrentProduct(productId: string) {
   const data = await gql<ProductQueryResult>(
     `query product($id: ID!) {
       product(id: $id) {
-        id title tags vendor productType descriptionHtml
+        id title handle tags vendor productType descriptionHtml
         seo { title description }
+        variants(first: 50) { edges { node { id compareAtPrice } } }
       }
     }`,
     { id: productId }
@@ -48,6 +51,11 @@ function getCurrentValue(
     case "title": return product.title;
     case "vendor": return product.vendor;
     case "productType": return product.productType;
+    case "handle": return product.handle;
+    case "compareAtPrice": {
+      const first = product.variants?.edges?.[0]?.node;
+      return first?.compareAtPrice ? `$${first.compareAtPrice}` : "cleared";
+    }
     default: return null;
   }
 }
@@ -137,12 +145,32 @@ export async function POST(request: Request) {
         }`,
         { input: { id: entry.product_id, seo: { [seoField]: entry.old_value } } }
       );
+    } else if (entry.field === "compareAtPrice") {
+      // Restore compare at price on all variants
+      const variantEdges = product.variants?.edges || [];
+      const restoreValue = entry.old_value.startsWith("$")
+        ? entry.old_value.slice(1)
+        : entry.old_value === "cleared" ? null : entry.old_value;
+      const variantInputs = variantEdges.map((edge) => ({
+        id: edge.node.id,
+        compareAtPrice: restoreValue,
+      }));
+      await gql(
+        `mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+            productVariants { id compareAtPrice }
+            userErrors { field message }
+          }
+        }`,
+        { productId: entry.product_id, variants: variantInputs }
+      );
     } else {
       const fieldMap: Record<string, string> = {
         description: "descriptionHtml",
         title: "title",
         vendor: "vendor",
         productType: "productType",
+        handle: "handle",
       };
       const shopifyField = fieldMap[entry.field] || entry.field;
       await gql(
