@@ -61,6 +61,7 @@ export default function ChatPanel() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [queuedMessage, setQueuedMessage] = useState<{ text: string; attachments: Attachment[] } | null>(null);
   const [listening, setListening] = useState(false);
+  const [showDone, setShowDone] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -429,6 +430,9 @@ export default function ChatPanel() {
     } finally {
       abortControllerRef.current = null;
       setStreaming(false);
+      // Flash "Done" indicator briefly (only on normal completion, not errors/aborts)
+      setShowDone(true);
+      setTimeout(() => setShowDone(false), 3000);
     }
   }, [input, streaming, activeThread, attachments]);
 
@@ -774,6 +778,14 @@ export default function ChatPanel() {
                 ■ Stop
               </button>
             )}
+          </div>
+        )}
+
+        {/* Done indicator — brief flash after completion */}
+        {showDone && !streaming && (
+          <div className="px-4 py-2 border-t border-emerald-100 bg-gradient-to-r from-emerald-50 via-sky-50 to-emerald-50 flex items-center gap-2 transition-opacity duration-500">
+            <span className="text-emerald-500 text-sm">✓</span>
+            <span className="text-xs text-emerald-600 font-medium">Finished</span>
           </div>
         )}
 
